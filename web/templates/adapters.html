@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Adapters — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+        <h1 class="page-title">Adapters</h1>
+        <p class="page-subtitle">Manage protocol adapters for data collection</p>
+    </div>
+    <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
+</div>
+
+{% if adapters %}
+<div class="grid-2 animate-in">
+    {% for adapter in adapters %}
+    <div class="card" style="position:relative;">
+        <div class="card-header">
+            <span class="card-title">
+                {{ adapter.name }}
+            </span>
+            {% if adapter.status == 'connected' %}
+            <span class="badge badge-green"><span class="status-dot green"></span> Running</span>
+            {% elif adapter.status == 'connecting' %}
+            <span class="badge badge-amber"><span class="status-dot amber"></span> Connecting</span>
+            {% elif adapter.status == 'error' %}
+            <span class="badge badge-red"><span class="status-dot red"></span> Error</span>
+            {% else %}
+            <span class="badge badge-red"><span class="status-dot red"></span> Stopped</span>
+            {% endif %}
+        </div>
+
+        <div style="margin-bottom:16px; font-size:13px; color:var(--text-secondary);">
+            <p>Type: <strong style="color:var(--text-primary); text-transform:uppercase;">{{ adapter.type }}</strong></p>
+            <p>ID: <span style="font-family:monospace; font-size:12px;">{{ adapter.id[:12] }}...</span></p>
+            {% if adapter.created_at %}
+            <p>Created: {{ adapter.created_at }}</p>
+            {% endif %}
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+            <form method="POST" action="/adapters/{{ adapter.id }}/toggle" style="display:inline;">
+                {% if adapter.status == 'connected' %}
+                <button type="submit" class="btn btn-sm btn-secondary">Stop</button>
+                {% else %}
+                <button type="submit" class="btn btn-sm btn-primary">Start</button>
+                {% endif %}
+            </form>
+            <form method="POST" action="/adapters/{{ adapter.id }}/delete" style="display:inline;"
+                  onsubmit="return confirm('Delete this adapter?');">
+                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card animate-in">
+    <div class="empty-state">
+        <div class="empty-state-icon" style="font-size:20px; color:var(--text-muted);">No Adapters</div>
+        <p class="empty-state-text">No adapters configured yet.<br>Add your first adapter to start collecting data from your industrial equipment.</p>
+        <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

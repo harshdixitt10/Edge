@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Activity — Datonis Edge{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+        <h1 class="page-title">Activity Panel</h1>
+        <p class="page-subtitle">Live status of all enabled things — event, scan, alert timestamps and errors</p>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center;">
+        <span class="badge {% if cloud_connected %}badge-success{% else %}badge-error{% endif %}"
+            style="font-size:13px; padding:6px 16px;">
+            {% if cloud_connected %}Connected{% else %}Disconnected{% endif %}
+        </span>
+        <span class="badge badge-info" style="font-size:13px; padding:6px 16px;">
+            {{ total_things }} Thing{{ 's' if total_things != 1 else '' }}
+        </span>
+    </div>
+</div>
+
+{% if activities %}
+<div class="card animate-in" style="overflow-x:auto;">
+    <table class="data-table" style="width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap;">
+        <thead>
+            <tr>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Thing Name</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Thing Key</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Adapter Name</th>
+                <th style="padding:10px 12px; text-align:center; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Metrics</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Event</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Ack Event</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Scan</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Ack Scan</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Alert</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Ack Alert</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Registered Error</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Event Error</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Scan Error</th>
+                <th style="padding:10px 12px; text-align:left; border-bottom:2px solid var(--border-color); color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    Last Alert Error</th>
+            </tr>
+        </thead>
+        <tbody id="activity-body">
+            {% for act in activities %}
+            <tr style="border-bottom:1px solid var(--border-color); transition:background 0.2s;"
+                onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+                onmouseout="this.style.background='transparent'">
+                <!-- Thing Name -->
+                <td style="padding:8px 12px; font-weight:500; color:var(--text-primary);">
+                    {{ act.thing_name or '—' }}
+                </td>
+                <!-- Thing Key -->
+                <td style="padding:8px 12px; font-family:monospace; font-size:11px; color:var(--text-secondary);">
+                    {{ act.thing_key[:14] }}{% if act.thing_key|length > 14 %}…{% endif %}
+                </td>
+                <!-- Adapter Name -->
+                <td style="padding:8px 12px; color:var(--text-secondary);">
+                    {{ act.adapter_name or '—' }}
+                </td>
+                <!-- Metrics -->
+                <td style="padding:8px 12px; text-align:center; font-weight:600; color:var(--accent-blue);">
+                    {{ act.metrics_count or 0 }}
+                </td>
+                <!-- Last Event -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_event_ts %}
+                    <span style="color:#22c55e;">{{ act.last_event_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Ack Event -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_ack_event_ts %}
+                    <span style="color:#3b82f6;">{{ act.last_ack_event_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Scan -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_scan_ts %}
+                    <span style="color:#22c55e;">{{ act.last_scan_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Ack Scan -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_ack_scan_ts %}
+                    <span style="color:#3b82f6;">{{ act.last_ack_scan_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Alert -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_alert_ts %}
+                    <span style="color:#f59e0b;">{{ act.last_alert_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Ack Alert -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_ack_alert_ts %}
+                    <span style="color:#a855f7;">{{ act.last_ack_alert_ts[:19] }}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Registered Error -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_registered_error %}
+                    <span style="color:#ef4444;" title="{{ act.last_registered_error }}">{{ act.last_registered_error[:30] }}{% if act.last_registered_error|length > 30 %}…{% endif %}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Event Error -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_event_error %}
+                    <span style="color:#ef4444;" title="{{ act.last_event_error }}">{{ act.last_event_error[:30] }}{% if act.last_event_error|length > 30 %}…{% endif %}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Scan Error -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_scan_error %}
+                    <span style="color:#ef4444;" title="{{ act.last_scan_error }}">{{ act.last_scan_error[:30] }}{% if act.last_scan_error|length > 30 %}…{% endif %}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <!-- Last Alert Error -->
+                <td style="padding:8px 12px; font-size:11px;">
+                    {% if act.last_alert_error %}
+                    <span style="color:#ef4444;" title="{{ act.last_alert_error }}">{{ act.last_alert_error[:30] }}{% if act.last_alert_error|length > 30 %}…{% endif %}</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card animate-in" style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+    <div style="font-size:20px; margin-bottom:16px; color:var(--text-muted);">No Data</div>
+    <h3 style="margin-bottom:8px; color:var(--text-primary);">No Activity Yet</h3>
+    <p>Configure and enable adapters with things to see activity here.</p>
+    <a href="/adapters" class="btn btn-primary" style="margin-top:16px;">Configure Adapter</a>
+</div>
+{% endif %}
+
+<!-- Auto-refresh script -->
+<script>
+    setInterval(async () => {
+        try {
+            const resp = await fetch('/api/activity/status');
+            const data = await resp.json();
+            // Simply reload the page for simplicity
+            if (data.activities && data.activities.length > 0) {
+                location.reload();
+            }
+        } catch (e) { }
+    }, 10000); // Refresh every 10 seconds
+</script>
+{% endblock %}

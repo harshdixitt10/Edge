@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Settings — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Configure cloud connection, data retention, and system preferences</p>
+</div>
+
+{% if success %}
+<div class="alert alert-success animate-in">Settings saved successfully!</div>
+{% endif %}
+
+<!-- Cloud Connection Settings -->
+<div class="card animate-in" style="margin-bottom:24px;">
+    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+        <span class="card-title">Cloud Connection</span>
+        <span id="cloud-status-badge" class="badge {% if cloud_connected %}badge-success{% else %}badge-error{% endif %}" style="font-size:13px; padding:4px 14px;">
+            {% if cloud_connected %}Connected{% else %}Disconnected{% endif %}
+        </span>
+    </div>
+    <form method="POST" action="/settings/cloud">
+        <div class="grid-2">
+            <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">Cloud Endpoint URL</label>
+                <input type="url" name="endpoint_url" class="form-input"
+                       value="{{ config.cloud.endpoint_url if config else '' }}"
+                       placeholder="https://api.datonis.io:443" style="font-size:15px;">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="api_key">Access Key</label>
+                <input type="text" class="form-input" id="api_key" name="api_key"
+                       value="{{ config.cloud.api_key if config and config.cloud.api_key != 'access key' else '' }}"
+                       placeholder="Enter Datonis Access Key" style="font-size:15px; font-family:monospace;">
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Your Datonis Cloud Access Key. Leave blank to keep current key.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="secret_key">Secret Key</label>
+                <input type="text" class="form-input" id="secret_key" name="secret_key"
+                       value="{{ config.cloud.secret_key if config and config.cloud.secret_key != 'secret key' else '' }}"
+                       placeholder="Enter Datonis Secret Key" style="font-size:15px; font-family:monospace;">
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Your Datonis Cloud Secret Key. Used to HMAC-sign data payloads. Leave blank to keep current key.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Edge ID</label>
+                <input type="text" name="edge_id" class="form-input"
+                       value="{{ config.cloud.edge_id if config else 'edge-plant-01' }}"
+                       placeholder="edge-plant-01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Request Timeout (secs)</label>
+                <input type="number" name="timeout_secs" class="form-input"
+                       value="{{ config.cloud.timeout_secs if config else 10 }}" min="1" max="120">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Batch Size (events per POST)</label>
+                <input type="number" name="batch_size" class="form-input"
+                       value="{{ config.cloud.batch_size if config else 100 }}" min="1" max="10000">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Heartbeat Interval (secs)</label>
+                <input type="number" name="heartbeat_interval_secs" class="form-input"
+                       value="{{ config.cloud.heartbeat_interval_secs if config else 60 }}" min="5">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">
+                <label class="toggle-switch" style="margin-right:8px; vertical-align:middle;">
+                    <input type="checkbox" name="ssl_verify"
+                           {{ 'checked' if config and config.cloud.ssl_verify else '' }}>
+                    <span class="toggle-slider"></span>
+                </label>
+                Verify SSL Certificate
+            </label>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                Disable only for self-signed certificates in development
+            </p>
+        </div>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary">Save Cloud Settings</button>
+            <button type="button" class="btn btn-secondary" id="btn-test-cloud" onclick="testCloudConnection()">
+                Test Connection
+            </button>
+            <span id="test-result" style="font-size:13px; margin-left:8px;"></span>
+        </div>
+    </form>
+</div>
+
+<script>
+async function testCloudConnection() {
+    const btn = document.getElementById('btn-test-cloud');
+    const result = document.getElementById('test-result');
+    const badge = document.getElementById('cloud-status-badge');
+
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    result.textContent = '';
+
+    try {
+        const resp = await fetch('/api/settings/test-cloud', {method: 'POST', headers: {'Content-Type': 'application/json'}});
+        const data = await resp.json();
+
+        if (data.success) {
+            result.innerHTML = '<span style="color:#22c55e;">Connected: ' + data.message + '</span>';
+            badge.className = 'badge badge-success';
+            badge.innerHTML = 'Connected';
+        } else {
+            result.innerHTML = '<span style="color:#ef4444;">Failed: ' + data.message + '</span>';
+            badge.className = 'badge badge-error';
+            badge.innerHTML = 'Disconnected';
+        }
+    } catch (e) {
+        result.innerHTML = '<span style="color:#ef4444;">Network error: ' + e.message + '</span>';
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Test Connection';
+}
+</script>
+
+<!-- Data Retention Settings -->
+<div class="card animate-in" style="margin-bottom:24px; animation-delay:0.1s;">
+    <div class="card-header">
+        <span class="card-title">Data Retention</span>
+    </div>
+    <form method="POST" action="/settings/retention">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">Retention Period (days)</label>
+                <input type="number" name="retention_days" class="form-input"
+                       value="{{ config.database.retention_days if config else 7 }}" min="1" max="365">
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                    Sent events older than this will be automatically deleted
+                </p>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Retention Settings</button>
+    </form>
+</div>
+
+<!-- System Info (read-only) -->
+<div class="card animate-in" style="animation-delay:0.15s;">
+    <div class="card-header">
+        <span class="card-title">System Information</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); display:grid; grid-template-columns:180px 1fr; gap:8px;">
+        <span>Database Path:</span>
+        <span style="font-family:monospace; color:var(--text-primary);">{{ config.database.path if config else 'N/A' }}</span>
+        <span>Config File:</span>
+        <span style="font-family:monospace; color:var(--text-primary);">config.yaml</span>
+        <span>Log File:</span>
+        <span style="font-family:monospace; color:var(--text-primary);">{{ config.logging.file if config else 'N/A' }}</span>
+        <span>Server Port:</span>
+        <span style="font-family:monospace; color:var(--text-primary);">{{ config.server.port if config else 8080 }}</span>
+        <span>Version:</span>
+        <span style="font-family:monospace; color:var(--text-primary);">1.0.0</span>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Select Adapter Type — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Add New Adapter</h1>
+    <p class="page-subtitle">Select the protocol adapter type for your industrial device</p>
+</div>
+
+<div class="grid-3 animate-in">
+    <!-- OPC-UA -->
+    <a href="/adapters/opcua/config" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
+        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:var(--accent-blue);">OPC-UA</div>
+        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px; color:var(--text-primary);">OPC-UA</h3>
+        <p style="font-size:13px; color:var(--text-secondary);">
+            Connect to OPC-UA servers for PLC, SCADA, and DCS data collection.
+            Supports subscriptions, security policies, and namespace browsing.
+        </p>
+        <div style="margin-top:16px;">
+            <span class="badge badge-green">Available</span>
+        </div>
+    </a>
+
+    <!-- Modbus (Coming Soon) -->
+    <div class="card" style="text-align:center; opacity:0.5; cursor:not-allowed;">
+        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:var(--text-muted);">Modbus</div>
+        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px;">Modbus TCP/RTU</h3>
+        <p style="font-size:13px; color:var(--text-secondary);">
+            Connect to Modbus TCP or RTU devices for register-based data collection.
+        </p>
+        <div style="margin-top:16px;">
+            <span class="badge badge-amber">Coming Soon</span>
+        </div>
+    </div>
+
+    <!-- MQTT (Coming Soon) -->
+    <div class="card" style="text-align:center; opacity:0.5; cursor:not-allowed;">
+        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:var(--text-muted);">MQTT</div>
+        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px;">MQTT Subscriber</h3>
+        <p style="font-size:13px; color:var(--text-secondary);">
+            Subscribe to existing MQTT brokers to collect data from plant-level IoT topics.
+        </p>
+        <div style="margin-top:16px;">
+            <span class="badge badge-amber">Coming Soon</span>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top:24px;">
+    <a href="/adapters" class="btn btn-secondary">← Back to Adapters</a>
+</div>
+{% endblock %}
