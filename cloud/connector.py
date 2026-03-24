@@ -204,30 +204,34 @@ class CloudConnector:
                 # Check if any things have events ready to send (send interval elapsed)
                 ready_events = self._aggregator.get_ready_events()
                 if ready_events:
-                    # Write ONLY the aggregated (latest) events to store
-                    for ev in ready_events:
-                        await self.store.write_event(ev)
-
-                    if self.http.connected:
+                    unsent_count = await self.store.get_unsent_count()
+                    
+                    if unsent_count == 0 and self.http.connected and not self.http.backfilling:
+                        # Case 1: Active Network, No Backlog, No active backfill — Send directly
                         success = await self.http.publish(ready_events)
                         now_utc = datetime.now(timezone.utc).isoformat()
+                        
                         if success:
-                            ids = [e.id for e in ready_events]
-                            await self.store.mark_sent_bulk(ids)
-                            # Update activity ack timestamp
+                            # Save to store directly marked as 'sent' for UI history, skipping the queue
+                            for ev in ready_events:
+                                ev.sent = True
+                                await self.store.write_event(ev)
+                                
                             thing_keys = set(e.thing_key for e in ready_events)
                             for tk in thing_keys:
                                 await self.store.update_activity(
                                     thing_key=tk,
                                     last_ack_event_ts=now_utc,
                                     last_ack_scan_ts=now_utc,
-                                    last_event_error="" # Clear error on success
+                                    last_event_error="" # Clear error
                                 )
-                            logger.info(
-                                f"📤 Sent {len(ready_events)} aggregated event(s) to cloud"
-                            )
+                            logger.info(f"📤 Directly sent {len(ready_events)} event(s) to cloud (bypass buffer)")
                         else:
-                            # Update activity with send failure
+                            # Send failed — Start buffering
+                            for ev in ready_events:
+                                ev.sent = False
+                                await self.store.write_event(ev)
+                                
                             thing_keys = set(e.thing_key for e in ready_events)
                             for tk in thing_keys:
                                 await self.store.update_activity(
@@ -235,8 +239,15 @@ class CloudConnector:
                                     last_event_error="Cloud delivery failed (check logs for 4xx/5xx)"
                                 )
                     else:
+                        # Case 2: Network Down OR Backlog exists — Buffer locally
+                        # Events MUST be buffered logically to be backfilled progressively
+                        for ev in ready_events:
+                            ev.sent = False
+                            await self.store.write_event(ev)
+                            
                         logger.info(
-                            f"💾 Stored {len(ready_events)} aggregated event(s) locally (cloud offline)"
+                            f"💾 Buffered {len(ready_events)} event(s) locally "
+                            f"(Backlog: {unsent_count}, Online: {self.http.connected}, Backfilling: {self.http.backfilling})"
                         )
 
             except Exception as e:

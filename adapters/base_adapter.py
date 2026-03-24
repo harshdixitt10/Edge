@@ -43,20 +43,36 @@ class BaseAdapter(ABC):
         ...
 
     async def start(self) -> None:
-        """Start the adapter lifecycle."""
+        """Start the adapter lifecycle with automatic reconnection."""
         self.running = True
-        self.status = "connecting"
         logger.info(f"Starting adapter '{self.name}' ({self.adapter_id})")
-        try:
-            await self.connect()
-            self.status = "connected"
-            logger.info(f"Adapter '{self.name}' connected")
-            await self.run()
-        except Exception as e:
-            self.status = "error"
-            self.error_message = str(e)
-            logger.error(f"Adapter '{self.name}' error: {e}")
-            raise
+        
+        while self.running:
+            self.status = "connecting"
+            try:
+                await self.connect()
+                self.status = "connected"
+                self.error_message = ""
+                logger.info(f"Adapter '{self.name}' connected")
+                await self.run()
+                # If run() successfully finishes without exception, exit cleanly
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self.status = "error"
+                self.error_message = str(e)
+                logger.error(f"Adapter '{self.name}' connection lost/error: {e} - retrying in 5 seconds...")
+                
+                # Cleanup before retry
+                try:
+                    await self.disconnect()
+                except Exception:
+                    pass
+                
+                if self.running:
+                    import asyncio
+                    await asyncio.sleep(5)
 
     async def stop(self) -> None:
         """Stop the adapter."""

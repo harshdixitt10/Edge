@@ -212,9 +212,17 @@ class OPCUAAdapter(BaseAdapter):
                 task = asyncio.create_task(self._run_simulated(thing))
                 self._tasks.append(task)
 
-        # Keep alive while running
+        # Keep alive while running and actively monitor connection state
         while self.running:
-            await asyncio.sleep(1)
+            if self._client:
+                try:
+                    # Ping the server to ensure connection is still alive
+                    await self._client.nodes.server_state.read_value()
+                except Exception as e:
+                    logger.error(f"OPC-UA watchdog detected connection loss: {e}")
+                    raise ConnectionError("OPC-UA client disconnected unexpectedly")
+                    
+            await asyncio.sleep(5)
 
     async def _run_subscribed(self, thing) -> None:
         """Run with real OPC-UA subscription."""

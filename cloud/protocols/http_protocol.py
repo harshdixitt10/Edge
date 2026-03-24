@@ -39,6 +39,7 @@ class HttpCloudConnector:
         self.ssl_verify: bool = config.get("ssl_verify", True)
         self._client: Optional[httpx.AsyncClient] = None
         self.connected: bool = False
+        self.backfilling: bool = False
 
     # ── lifecycle ──────────────────────────────────────────────
 
@@ -106,20 +107,33 @@ class HttpCloudConnector:
 
     # ── publish events ────────────────────────────────────────
 
-    async def publish(self, events: list[DataEvent]) -> bool:
-        """POST a batch of events to /api/v3/things/event.json"""
+    async def publish(self, events: list[DataEvent]) -> bool | None:
+        """POST a batch of events to /api/v3/things/event.json.
+
+        Returns:
+            True  — cloud accepted the batch.
+            None  — cloud permanently rejected (400/422): stale/invalid metric IDs.
+                    Caller should mark these events as done to unblock the queue.
+            False — transient failure (network error, 5xx, rate limit): retry later.
+        """
         if not self._client:
             return False
 
         try:
-            # Build Datonis bulk-event payload
-            # Group by thing_key so all tags for the same thing are merged into one object
-            # IMPORTANT: Only send events that have a registered metric_id
-            #   Derived tags without metric_mappings have empty metric_id and must be excluded
-            merged_events = {}
+            # Build Datonis bulk-event payload.
+            #
+            # Group by (thing_key, timestamp_ms) so that:
+            #   - Multiple metrics sampled at the exact same instant are merged into one entry
+            #     (correct for live sends where the aggregator emits one batch per send window)
+            #   - Events at different timestamps each become their own entry in the array
+            #     (correct for backfill — every historical data point is preserved individually)
+            #
+            # IMPORTANT: Only include events with a registered metric_id.
+            #   Derived tags without metric_mappings have no metric_id and must be excluded.
+            merged_events: dict[tuple, dict] = {}
             for e in events:
                 metric_name = e.metric_id if e.metric_id else e.tag_id
-                
+
                 # Skip events without a registered metric_id (e.g. unmapped derived tags)
                 if not e.metric_id:
                     logger.debug(
@@ -127,25 +141,24 @@ class HttpCloudConnector:
                         f"(no metric_id — not registered on cloud)"
                     )
                     continue
-                
+
                 ts_ms = int(e.timestamp.timestamp() * 1000)
-                
-                key = e.thing_key
+
+                # Key on (thing_key, timestamp) — preserves all historical data points
+                key = (e.thing_key, ts_ms)
                 if key not in merged_events:
                     merged_events[key] = {
                         "thing_key": e.thing_key,
                         "timestamp": ts_ms,
                         "data": {},
                     }
-                # Use highest timestamp as the group's timestamp
-                merged_events[key]["timestamp"] = max(merged_events[key]["timestamp"], ts_ms)
                 merged_events[key]["data"][metric_name] = e.value
-                
+
             # If all events were filtered out, nothing to send
             if not merged_events:
                 logger.debug("All events filtered (no mapped metrics) — nothing to send")
                 return True  # Not an error, just nothing to send
-                
+
             datonis_events = list(merged_events.values())
 
             payload = {
@@ -173,9 +186,10 @@ class HttpCloudConnector:
                 self.connected = True
                 return True
 
-            if resp.status_code in (400,):
-                logger.warning(f"Cloud rejected batch (400): {resp.text[:500]}")
-                return False
+            if resp.status_code == 400:
+                # Permanent rejection — bad payload structure, won't change on retry
+                logger.warning(f"Cloud permanently rejected batch (400): {resp.text[:500]}")
+                return None
 
             if resp.status_code in (401, 403):
                 logger.error(f"Cloud auth error ({resp.status_code}): {resp.text[:500]}")
@@ -183,8 +197,13 @@ class HttpCloudConnector:
                 return False
 
             if resp.status_code == 422:
-                logger.warning(f"Cloud rejected batch (422 Unprocessable): {resp.text[:500]}")
-                return False
+                # Permanent rejection — metric IDs in payload don't match registered metrics.
+                # Common cause: stale buffered events from an old adapter config.
+                # Return None so backfill skips these events instead of retrying forever.
+                logger.warning(
+                    f"Cloud permanently rejected batch (422 — metric mismatch): {resp.text[:500]}"
+                )
+                return None
 
             if resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", "5"))
