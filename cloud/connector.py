@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from collections import defaultdict
 from typing import Optional
 
@@ -134,9 +135,14 @@ class CloudConnector:
                         send_interval = thing.get("send_interval_ms", 30000)
                         if thing_key:
                             self._aggregator.set_send_interval(thing_key, send_interval)
-                            logger.debug(
-                                f"📋 Send interval for thing '{thing_key}': "
-                                f"{send_interval}ms"
+                            # Initialize/update activity metadata
+                            metrics_count = len(thing.get("metric_mappings", [])) + len(thing.get("derived_tags", []))
+                            await self.store.update_activity(
+                                thing_key=thing_key,
+                                thing_name=thing.get("name", ""),
+                                adapter_name=adapter_data.get("name", "OPC-UA Adapter"),
+                                adapter_id=adapter_data.get("id", ""),
+                                metrics_count=metrics_count
                             )
                 except (json.JSONDecodeError, KeyError) as e:
                     logger.warning(f"Failed to parse adapter config: {e}")
@@ -178,6 +184,14 @@ class CloudConnector:
 
                     # Buffer in aggregator only (NOT written to store yet)
                     self._aggregator.add_event(event)
+                    
+                    # Update activity scanning timestamp
+                    await self.store.update_activity(
+                        thing_key=event.thing_key,
+                        last_event_ts=event.timestamp.isoformat(),
+                        last_scan_ts=datetime.now(timezone.utc).isoformat(),
+                        status="active"
+                    )
 
                     logger.info(
                         f"📥 Event received — thing={event.thing_key} "
@@ -196,12 +210,30 @@ class CloudConnector:
 
                     if self.http.connected:
                         success = await self.http.publish(ready_events)
+                        now_utc = datetime.now(timezone.utc).isoformat()
                         if success:
                             ids = [e.id for e in ready_events]
                             await self.store.mark_sent_bulk(ids)
+                            # Update activity ack timestamp
+                            thing_keys = set(e.thing_key for e in ready_events)
+                            for tk in thing_keys:
+                                await self.store.update_activity(
+                                    thing_key=tk,
+                                    last_ack_event_ts=now_utc,
+                                    last_ack_scan_ts=now_utc,
+                                    last_event_error="" # Clear error on success
+                                )
                             logger.info(
                                 f"📤 Sent {len(ready_events)} aggregated event(s) to cloud"
                             )
+                        else:
+                            # Update activity with send failure
+                            thing_keys = set(e.thing_key for e in ready_events)
+                            for tk in thing_keys:
+                                await self.store.update_activity(
+                                    thing_key=tk,
+                                    last_event_error="Cloud delivery failed (check logs for 4xx/5xx)"
+                                )
                     else:
                         logger.info(
                             f"💾 Stored {len(ready_events)} aggregated event(s) locally (cloud offline)"

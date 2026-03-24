@@ -28,4 +28,4 @@ database:
   retention_days: 7
 logging:
   level: INFO
-  file: logs/edge_server.log
+  file: ../logs/edge_server.log

@@ -72,7 +72,13 @@
                 </td>
                 <!-- Metrics -->
                 <td style="padding:8px 12px; text-align:center; font-weight:600; color:var(--accent-blue);">
-                    {{ act.metrics_count or 0 }}
+                    <a href="javascript:void(0)" 
+                       class="metrics-link"
+                       data-thing="{{ act.thing_name | escape }}"
+                       data-metrics='{{ act.metrics_list | tojson | safe }}'
+                       style="color:var(--accent-blue); text-decoration:none; border-bottom:1px dashed var(--accent-blue);">
+                       {{ act.metrics_count or 0 }}
+                    </a>
                 </td>
                 <!-- Last Event -->
                 <td style="padding:8px 12px; font-size:11px;">
@@ -168,9 +174,72 @@
 </div>
 {% endif %}
 
+<!-- Metrics Modal -->
+<div id="metricsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div class="card" style="width:500px; max-width:90%; max-height:80vh; overflow-y:auto; background:var(--bg-card);">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:12px; margin-bottom:16px;">
+            <h3 style="margin:0; font-size:16px; color:var(--text-primary);">Metrics for <span id="modalThingName"></span></h3>
+            <button onclick="document.getElementById('metricsModal').style.display='none'" style="background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:20px;">&times;</button>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+            <thead>
+                <tr>
+                    <th style="padding:8px; border-bottom:2px solid var(--border-color); color:var(--text-muted);">Tag Name</th>
+                    <th style="padding:8px; border-bottom:2px solid var(--border-color); color:var(--text-muted);">Data Type</th>
+                    <th style="padding:8px; border-bottom:2px solid var(--border-color); color:var(--text-muted);">Tag Type</th>
+                </tr>
+            </thead>
+            <tbody id="metricsModalBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function showMetricsModal(thingName, metrics) {
+    document.getElementById('modalThingName').textContent = thingName;
+    const body = document.getElementById('metricsModalBody');
+    body.innerHTML = '';
+    
+    if (!metrics || metrics.length === 0) {
+        body.innerHTML = `<tr><td colspan="3" style="padding:16px; text-align:center; color:var(--text-muted);">No metrics configured.</td></tr>`;
+    } else {
+        metrics.forEach(m => {
+            body.innerHTML += `
+                <tr style="border-bottom:1px solid var(--border-color);">
+                    <td style="padding:8px; color:var(--text-primary); font-weight:500;">${m.tagname}</td>
+                    <td style="padding:8px; color:var(--text-secondary);">${m.datatype}</td>
+                    <td style="padding:8px; color:var(--text-secondary);"><span class="badge badge-info" style="font-size:11px;">${m.tagtype}</span></td>
+                </tr>
+            `;
+        });
+    }
+    
+    document.getElementById('metricsModal').style.display = 'flex';
+}
+
+// Global click listener for metrics modal links
+document.addEventListener('click', e => {
+    const link = e.target.closest('.metrics-link');
+    if (link) {
+        e.preventDefault();
+        try {
+            const thingName = link.getAttribute('data-thing');
+            const metrics = JSON.parse(link.getAttribute('data-metrics'));
+            showMetricsModal(thingName, metrics);
+        } catch (err) {
+            console.error('Failed to parse metrics data', err);
+        }
+    }
+});
+</script>
+
 <!-- Auto-refresh script -->
 <script>
     setInterval(async () => {
+        // Prevent auto-refresh if modal is open to avoid confusing user
+        if(document.getElementById('metricsModal').style.display === 'flex') return;
+
         try {
             const resp = await fetch('/api/activity/status');
             const data = await resp.json();

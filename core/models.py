@@ -172,7 +172,7 @@ class DatabaseConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    file: str = "logs/edge_server.log"
+    file: str = "../logs/edge_server.log"
 
 
 class AppConfig(BaseModel):

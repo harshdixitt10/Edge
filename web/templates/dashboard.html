@@ -149,7 +149,7 @@
                 {% for event in recent_events %}
                 <tr>
                     <td style="color:var(--text-muted); font-size:12px; font-family:monospace;">
-                        {{ event.timestamp.strftime('%H:%M:%S') if event.timestamp else '' }}
+                        {{ event.timestamp.astimezone().strftime('%H:%M:%S') if event.timestamp else '' }}
                     </td>
                     <td><span class="badge badge-blue">{{ event.adapter_name }}</span></td>
                     <td style="font-family:monospace; font-size:12px;">{{ event.tag_id or event.node_id }}</td>
