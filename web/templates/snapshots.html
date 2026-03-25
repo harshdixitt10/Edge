@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Snapshots — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+        <h1 class="page-title">Snapshots</h1>
+        <p class="page-subtitle">Configuration snapshots — last 10 kept automatically</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+        <label class="btn btn-secondary" style="cursor:pointer; margin:0;" title="Upload a snapshot JSON file">
+            ⬆ Upload Snapshot
+            <input type="file" id="upload-snapshot-input" accept=".json" style="display:none;" onchange="uploadSnapshot(this)">
+        </label>
+        <button class="btn btn-primary" onclick="createManualSnapshot()">📸 Take Snapshot</button>
+    </div>
+</div>
+
+<div id="snapshot-alert" style="display:none;" class="alert-banner"></div>
+
+{% if snapshots %}
+<div class="card animate-in">
+    <div class="card-header">
+        <span class="card-title">Saved Snapshots</span>
+        <span class="badge badge-amber">{{ snapshots|length }} / 10</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Trigger</th>
+                <th>Created</th>
+                <th style="text-align:right;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for snap in snapshots %}
+            <tr id="row-{{ snap.id }}">
+                <td>
+                    <span style="font-weight:500;">{{ snap.name }}</span>
+                    <span style="font-family:monospace; font-size:11px; color:var(--text-muted); display:block;">{{ snap.id[:12] }}...</span>
+                </td>
+                <td>
+                    {% if snap.trigger == 'adapter_saved' %}
+                        <span class="badge badge-green">Adapter Saved</span>
+                    {% elif snap.trigger == 'adapter_deleted' %}
+                        <span class="badge badge-red">Adapter Deleted</span>
+                    {% elif snap.trigger == 'cloud_settings' %}
+                        <span class="badge badge-amber">Cloud Settings</span>
+                    {% elif snap.trigger == 'pre_rollback' %}
+                        <span class="badge" style="background:rgba(139,92,246,0.15); color:#8b5cf6;">Pre-Rollback</span>
+                    {% elif snap.trigger == 'upload' %}
+                        <span class="badge badge-amber">Uploaded</span>
+                    {% else %}
+                        <span class="badge">{{ snap.trigger }}</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:13px; color:var(--text-secondary);">{{ snap.created_at[:19] | replace('T',' ') }}</td>
+                <td style="text-align:right;">
+                    <div style="display:flex; gap:6px; justify-content:flex-end;">
+                        <a href="/api/snapshots/{{ snap.id }}/download" class="btn btn-sm btn-secondary" title="Download as JSON">⬇ Download</a>
+                        <button class="btn btn-sm btn-primary" onclick="rollback('{{ snap.id }}', '{{ snap.name }}')" title="Restore this configuration">↩ Rollback</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSnapshot('{{ snap.id }}')" title="Delete this snapshot">Delete</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card animate-in">
+    <div class="empty-state">
+        <div class="empty-state-icon" style="font-size:20px;">📸</div>
+        <p class="empty-state-text">No snapshots yet.<br>Snapshots are created automatically whenever you save adapter or cloud settings.</p>
+        <button class="btn btn-primary" onclick="createManualSnapshot()">Take First Snapshot</button>
+    </div>
+</div>
+{% endif %}
+
+<!-- What's in a snapshot? -->
+<div class="card animate-in" style="margin-top:16px;">
+    <div class="card-header"><span class="card-title">What's Included in a Snapshot</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:12px; padding:4px 0;">
+        <div style="padding:12px; background:var(--bg-input); border-radius:var(--radius-sm);">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">☁️ Cloud Config</div>
+            <div style="font-size:12px; color:var(--text-secondary);">Endpoint, edge ID, batch size, heartbeat</div>
+        </div>
+        <div style="padding:12px; background:var(--bg-input); border-radius:var(--radius-sm);">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">🔌 Adapter Configs</div>
+            <div style="font-size:12px; color:var(--text-secondary);">All OPC-UA adapters, things, tags, metrics</div>
+        </div>
+        <div style="padding:12px; background:var(--bg-input); border-radius:var(--radius-sm);">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">💾 Database Settings</div>
+            <div style="font-size:12px; color:var(--text-secondary);">Retention period</div>
+        </div>
+        <div style="padding:12px; background:var(--bg-input); border-radius:var(--radius-sm);">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">🔒 Security Note</div>
+            <div style="font-size:12px; color:var(--text-secondary);">API keys &amp; secrets are excluded for safety</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showAlert(message, isError) {
+        const el = document.getElementById('snapshot-alert');
+        el.textContent = message;
+        el.style.display = 'block';
+        el.style.background = isError ? 'var(--accent-red-glow)' : 'var(--accent-green-glow)';
+        el.style.color = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+        el.style.padding = '12px 16px';
+        el.style.borderRadius = 'var(--radius-sm)';
+        el.style.marginBottom = '16px';
+        el.style.border = `1px solid ${isError ? 'var(--accent-red)' : 'var(--accent-green)'}`;
+        setTimeout(() => el.style.display = 'none', 4000);
+    }
+
+    async function createManualSnapshot() {
+        const name = await AppModal.prompt('Enter a name for this snapshot:', 'Manual snapshot', { title: 'Take Snapshot', icon: '📸', confirmText: 'Take Snapshot' });
+        if (name === null) return;  // cancelled
+        try {
+            const resp = await fetch('/api/snapshots/manual', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name || 'Manual snapshot'})
+            });
+            const result = await resp.json();
+            if (result.success) {
+                showAlert('✓ Snapshot created', false);
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                showAlert('✗ ' + result.message, true);
+            }
+        } catch(e) {
+            showAlert('✗ Request failed: ' + e.message, true);
+        }
+    }
+
+    async function rollback(id, name) {
+        const ok = await AppModal.confirm(`Roll back entire configuration to:\n"${name}"\n\nA pre-rollback snapshot will be saved first.`, { title: 'Confirm Rollback', icon: '↩️', confirmText: 'Rollback', danger: true });
+        if (!ok) return;
+        try {
+            const resp = await fetch(`/api/snapshots/${id}/rollback`, { method: 'POST' });
+            const result = await resp.json();
+            if (result.success) {
+                showAlert('✓ ' + result.message, false);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert('✗ ' + result.message, true);
+            }
+        } catch(e) {
+            showAlert('✗ Rollback failed: ' + e.message, true);
+        }
+    }
+
+    async function deleteSnapshot(id) {
+        const ok = await AppModal.confirm('Delete this snapshot? This cannot be undone.', { title: 'Delete Snapshot', icon: '🗑️', confirmText: 'Delete', danger: true });
+        if (!ok) return;
+        try {
+            const resp = await fetch(`/api/snapshots/${id}/delete`, { method: 'POST' });
+            const result = await resp.json();
+            if (result.success) {
+                const row = document.getElementById('row-' + id);
+                if (row) row.remove();
+                showAlert('Snapshot deleted', false);
+            }
+        } catch(e) {
+            showAlert('✗ Delete failed: ' + e.message, true);
+        }
+    }
+
+    function uploadSnapshot(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                const resp = await fetch('/api/snapshots/upload', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    showAlert('✓ ' + result.message, false);
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    showAlert('✗ ' + result.message, true);
+                }
+            } catch(err) {
+                showAlert('✗ Invalid JSON file: ' + err.message, true);
+            }
+        };
+        reader.readAsText(file);
+        input.value = '';
+    }
+</script>
+{% endblock %}

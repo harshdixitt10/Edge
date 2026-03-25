@@ -59,6 +59,17 @@
     </div>
     <div class="collapsible-body open" id="section-b">
 
+        <!-- Sync Things Bar -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            <span style="font-size:13px; color:var(--text-secondary); flex:1;">
+                Load registered Things from your Datonis cloud account (uses API key &amp; secret from Settings).
+            </span>
+            <button type="button" class="btn btn-secondary" onclick="syncThings(this)" style="white-space:nowrap;">
+                ⟳ Sync Things
+            </button>
+            <span id="sync-things-status" style="font-size:12px; color:var(--text-secondary);"></span>
+        </div>
+
         <!-- Search Bar -->
         <div class="search-bar" style="margin-bottom:16px;">
             <input type="text" id="thing-search" class="form-input"
@@ -84,7 +95,6 @@
                         <th>Total Tags</th>
                         <th>Metrics</th>
                         <th>Delete</th>
-                        <th>Enable/Disable</th>
                     </tr>
                 </thead>
                 <tbody id="thing-summary-body">
@@ -391,12 +401,32 @@
     <input type="hidden" name="config_json" id="config-json-field">
 
     <!-- Action Buttons -->
-    <div style="display:flex; gap:12px; margin-top:24px; padding:20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color);">
+    <div style="display:flex; gap:12px; margin-top:24px; padding:20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap;">
         <button type="button" class="btn btn-secondary" onclick="previewJson()">Preview JSON</button>
+        <button type="button" class="btn btn-secondary" onclick="downloadConfig()" title="Download current configuration as JSON file">⬇ Download JSON</button>
+        <label class="btn btn-secondary" style="cursor:pointer; margin:0;" title="Upload a JSON config file to populate the form">
+            ⬆ Upload JSON
+            <input type="file" id="upload-json-input" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
+        </label>
         <button type="submit" class="btn btn-primary" onclick="buildConfig()">Save & Start Adapter</button>
         <a href="/adapters" class="btn btn-secondary">Cancel</a>
     </div>
 </form>
+
+<!-- Sync Things Picker Modal -->
+<div class="modal-overlay" id="sync-modal">
+    <div class="modal" style="max-width:700px; width:95%;">
+        <div class="modal-header">
+            <h2 style="font-size:18px; font-weight:600;">Select Things to Import</h2>
+            <button class="modal-close" onclick="document.getElementById('sync-modal').classList.remove('show')">&#10005;</button>
+        </div>
+        <div id="sync-modal-body" style="max-height:400px; overflow:auto; margin:16px 0;"></div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button id="sync-import-btn" class="btn btn-primary">Import Selected</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('sync-modal').classList.remove('show')">Cancel</button>
+        </div>
+    </div>
+</div>
 
 <!-- JSON Preview Modal -->
 <div class="modal-overlay" id="json-modal">
@@ -492,9 +522,6 @@
                 <td><strong>${totalTags}</strong></td>
                 <td>${metrics}</td>
                 <td><button type="button" class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeThingByIndex(${i});">Del</button></td>
-                <td style="text-align:center;">
-                    <span class="badge ${disabled ? 'badge-red' : 'badge-green'}" style="font-size:11px;">${disabled ? 'Disabled' : 'Enabled'}</span>
-                </td>
             `;
             tbody.appendChild(row);
         });
@@ -503,9 +530,11 @@
     // ── Add/Remove Things ──
     let thingIndex = document.querySelectorAll('.thing-card').length;
 
-    function removeThingByIndex(idx) {
+    async function removeThingByIndex(idx) {
         const cards = document.querySelectorAll('.thing-card');
-        if (idx < cards.length && confirm('Remove this Thing?')) {
+        if (idx >= cards.length) return;
+        const ok = await AppModal.confirm('Remove this Thing configuration?', { title: 'Remove Thing', icon: '🗑️', confirmText: 'Remove', danger: true });
+        if (ok) {
             cards[idx].remove();
             refreshSummary();
         }
@@ -637,8 +666,9 @@
         refreshSummary();
     }
 
-    function removeThing(btn) {
-        if (confirm('Remove this Thing?')) {
+    async function removeThing(btn) {
+        const ok = await AppModal.confirm('Remove this Thing configuration?', { title: 'Remove Thing', icon: '🗑️', confirmText: 'Remove', danger: true });
+        if (ok) {
             btn.closest('.thing-card').remove();
             refreshSummary();
         }
@@ -722,7 +752,7 @@
     // ── Build JSON from form ──
     function buildConfig() {
         const config = {
-            adapter_type: "com.abc.gateway.edge.opcuaadapter.OpcuaAdapter",
+            adapter_type: "com.altizon.gateway.edge.opcuaadapter.OpcuaAdapter",
             auto_concurrency: document.getElementById('cfg-auto_concurrency').checked,
             threadpool_size: parseInt(document.getElementById('cfg-threadpool_size').value) || 1,
             schedule_delay_mills: parseInt(document.getElementById('cfg-schedule_delay_mills').value) || 200,
@@ -831,7 +861,126 @@
 
     function copyJson() {
         const text = document.getElementById('json-preview').textContent;
-        navigator.clipboard.writeText(text).then(() => alert('JSON copied!'));
+        navigator.clipboard.writeText(text).then(() => AppModal.alert('JSON copied to clipboard.', { title: 'Copied', icon: '✅' }));
+    }
+
+    // ── Sync Things from Datonis Cloud ──
+    async function syncThings(btn) {
+        const statusEl = document.getElementById('sync-things-status');
+        btn.disabled = true;
+        btn.textContent = '⏳ Syncing...';
+        statusEl.textContent = '';
+        statusEl.style.color = 'var(--text-secondary)';
+        try {
+            const resp = await fetch('/api/adapters/sync-things');
+            const result = await resp.json();
+            if (!result.success) {
+                statusEl.textContent = '✗ ' + result.message;
+                statusEl.style.color = 'var(--accent-red)';
+                return;
+            }
+            const things = result.things || [];
+            if (things.length === 0) {
+                statusEl.textContent = 'No things found in your account.';
+                return;
+            }
+            // Show picker modal to let user select which things to add
+            showThingPicker(things);
+            statusEl.textContent = `✓ Loaded ${things.length} thing(s)`;
+            statusEl.style.color = 'var(--accent-green)';
+        } catch(err) {
+            statusEl.textContent = '✗ Request failed: ' + err.message;
+            statusEl.style.color = 'var(--accent-red)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🔄 Sync Things';
+        }
+    }
+
+    function showThingPicker(things) {
+        // Build a simple modal to let user pick things to import
+        let rows = things.map(t => `
+            <tr>
+                <td style="padding:10px 8px;"><input type="checkbox" class="sync-check" data-key="${t.thing_key}" data-name="${t.name || t.thing_key}" checked></td>
+                <td style="padding:10px 8px; font-family:monospace; font-size:12px; color:var(--accent-blue);">${t.thing_key}</td>
+                <td style="padding:10px 8px; font-weight:500;">${t.name || '—'}</td>
+            </tr>`).join('');
+        const modal = document.getElementById('sync-modal');
+        document.getElementById('sync-modal-body').innerHTML = `
+            <table class="data-table" style="width:100%;">
+                <thead><tr>
+                    <th style="width:40px;"><input type="checkbox" id="sync-check-all" checked onchange="document.querySelectorAll('.sync-check').forEach(c=>c.checked=this.checked)"></th>
+                    <th>Thing Key</th><th>Name</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        modal.classList.add('show');
+        document.getElementById('sync-import-btn').onclick = function() {
+            document.querySelectorAll('.sync-check:checked').forEach(cb => {
+                addThingFromSync(cb.dataset.key, cb.dataset.name);
+            });
+            modal.classList.remove('show');
+            refreshSummary();
+        };
+    }
+
+    function addThingFromSync(thingKey, thingName) {
+        // Check if thing already exists
+        let existing = null;
+        document.querySelectorAll('.thing-card').forEach(card => {
+            if (card.querySelector('.thing-key')?.value === thingKey) existing = card;
+        });
+        if (existing) {
+            // Just update the name
+            existing.querySelector('.thing-name').value = thingName;
+            return;
+        }
+        // Add new thing card with the given key
+        addThing();
+        const cards = document.querySelectorAll('.thing-card');
+        const newCard = cards[cards.length - 1];
+        newCard.querySelector('.thing-key').value = thingKey;
+        newCard.querySelector('.thing-name').value = thingName;
+    }
+
+    // ── Download Config as JSON file ──
+    function downloadConfig() {
+        const config = buildConfig();
+        if (!config) return;
+        const adapterName = document.getElementById('adapter-name').value || 'adapter-config';
+        const filename = adapterName.toLowerCase().replace(/\s+/g, '-') + '.json';
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ── Upload JSON config and populate form ──
+    function uploadConfig(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const config = JSON.parse(e.target.result);
+                // Store config in hidden field and reload the page via form POST to re-render the form
+                document.getElementById('config-json-field').value = JSON.stringify(config);
+                // Use a dedicated import endpoint to re-render the form with the uploaded config
+                const form = document.getElementById('opcua-form');
+                const originalAction = form.action;
+                form.action = '/adapters/opcua/import';
+                form.submit();
+                form.action = originalAction;
+            } catch(err) {
+                AppModal.alert('Invalid JSON file: ' + err.message, { title: 'Upload Error', icon: '❌' });
+            }
+        };
+        reader.readAsText(file);
+        // Reset so same file can be re-uploaded
+        input.value = '';
     }
 
     // ── Test Connection ──

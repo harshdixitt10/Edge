@@ -74,6 +74,16 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
+CREATE_SNAPSHOTS_TABLE = """
+CREATE TABLE IF NOT EXISTS snapshots (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    trigger     TEXT NOT NULL DEFAULT 'manual',
+    snapshot_json TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+"""
+
 CREATE_ACTIVITY_LOG_TABLE = """
 CREATE TABLE IF NOT EXISTS activity_log (
     thing_key           TEXT PRIMARY KEY,
@@ -122,6 +132,7 @@ class LocalStore:
             + CREATE_CLOUD_CONFIG_TABLE
             + CREATE_USERS_TABLE
             + CREATE_ACTIVITY_LOG_TABLE
+            + CREATE_SNAPSHOTS_TABLE
         )
         await self._db.commit()
         logger.info(f"Local store initialized at {self.db_path}")
@@ -324,6 +335,14 @@ class LocalStore:
         )
         await self._db.commit()
 
+    async def toggle_adapter_enabled(self, adapter_id: str, enabled: bool, status: str) -> None:
+        """Enable or disable an adapter and update its status."""
+        await self._db.execute(
+            "UPDATE adapters SET enabled = ?, status = ?, updated_at = datetime('now') WHERE id = ?",
+            (1 if enabled else 0, status, adapter_id),
+        )
+        await self._db.commit()
+
     # ── User Operations ───────────────────────
 
     async def get_user(self, username: str) -> Optional[dict]:
@@ -410,6 +429,46 @@ class LocalStore:
                ON CONFLICT(thing_key) DO UPDATE SET {update_clause}""",
             [thing_key] + list(fields.values()),
         )
+        await self._db.commit()
+
+    # ── Snapshot Operations ───────────────────
+
+    async def save_snapshot(self, snapshot_id: str, name: str, trigger: str, snapshot_json: str) -> None:
+        """Save a configuration snapshot. Keeps only the last 10."""
+        await self._db.execute(
+            "INSERT OR REPLACE INTO snapshots (id, name, trigger, snapshot_json, created_at) "
+            "VALUES (?, ?, ?, ?, datetime('now'))",
+            (snapshot_id, name, trigger, snapshot_json),
+        )
+        # Prune: keep only 10 most recent
+        await self._db.execute(
+            "DELETE FROM snapshots WHERE id NOT IN "
+            "(SELECT id FROM snapshots ORDER BY created_at DESC LIMIT 10)"
+        )
+        await self._db.commit()
+
+    async def get_snapshots(self) -> list[dict]:
+        """Get all snapshots, newest first."""
+        cursor = await self._db.execute(
+            "SELECT id, name, trigger, created_at FROM snapshots ORDER BY created_at DESC"
+        )
+        rows = await cursor.fetchall()
+        return [{"id": r[0], "name": r[1], "trigger": r[2], "created_at": r[3]} for r in rows]
+
+    async def get_snapshot(self, snapshot_id: str) -> Optional[dict]:
+        """Get a single snapshot including its full JSON."""
+        cursor = await self._db.execute(
+            "SELECT id, name, trigger, snapshot_json, created_at FROM snapshots WHERE id = ?",
+            (snapshot_id,),
+        )
+        r = await cursor.fetchone()
+        if not r:
+            return None
+        return {"id": r[0], "name": r[1], "trigger": r[2], "snapshot_json": r[3], "created_at": r[4]}
+
+    async def delete_snapshot(self, snapshot_id: str) -> None:
+        """Delete a snapshot."""
+        await self._db.execute("DELETE FROM snapshots WHERE id = ?", (snapshot_id,))
         await self._db.commit()
 
     async def get_activities(self) -> list[dict]:

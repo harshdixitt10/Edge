@@ -5,7 +5,7 @@ server:
   debug: false
 auth:
   default_username: admin
-  default_password_hash: $2b$12$WlFFxJZV3rZ9jTtB0yRVfeKQEVNRT8/.NPRnX7aGHPnfsgWTwLxeC
+  default_password_hash: $2b$12$wUBR/ZpAIdnywXTwrrrR4OOZhfdi9ZM9tvCZFegn9a2BcL5cflFYS
   jwt_expiry_minutes: 60
   jwt_algorithm: HS256
 cloud:
@@ -13,6 +13,7 @@ cloud:
   endpoint_url: https://api.datonis.io:443
   api_key: fc795abcba4tct6d4a7b9c8fbf89t7ftedta9f16
   secret_key: 5d9a2d86a7a2f22657b163d78516e31e62daef7d
+  gateway_key: fdb45bb9a2
   edge_id: edge-plant-01
   timeout_secs: 10
   batch_size: 100

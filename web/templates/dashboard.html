@@ -1,124 +1,173 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Edge Server{% endblock %}
+{% block title %}Dashboard — Datonis Edge{% endblock %}
+
+{% block extra_head %}
+<style>
+    .stat-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 20px 24px;
+        position: relative;
+        overflow: hidden;
+        transition: var(--transition);
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+    }
+    .stat-card.blue::before  { background: var(--accent-blue); }
+    .stat-card.green::before { background: var(--accent-green); }
+    .stat-card.amber::before { background: var(--accent-amber); }
+    .stat-card.purple::before{ background: var(--accent-purple); }
+    .stat-card:hover { border-color: rgba(59,130,246,0.3); box-shadow: var(--shadow-glow); }
+
+    .stat-icon {
+        width: 40px; height: 40px;
+        border-radius: var(--radius-sm);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 700;
+        margin-bottom: 12px;
+    }
+    .stat-icon.blue   { background: rgba(59,130,246,0.12); color: var(--accent-blue); }
+    .stat-icon.green  { background: rgba(16,185,129,0.12);  color: var(--accent-green); }
+    .stat-icon.amber  { background: rgba(245,158,11,0.12);  color: var(--accent-amber); }
+    .stat-icon.purple { background: rgba(139,92,246,0.12);  color: var(--accent-purple); }
+
+    .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2px; }
+    .stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }
+    .stat-sub   { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+    .status-row {
+        display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .status-pill {
+        display: flex; align-items: center; gap: 8px;
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 50px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+        flex: 1; min-width: 160px;
+    }
+
+    .service-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .service-chip {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 14px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-color);
+        border-radius: 8px; font-size: 12px; font-weight: 500;
+        color: var(--text-secondary);
+    }
+    .service-chip .dot-run  { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+    .service-chip .dot-err  { background: var(--accent-red);   box-shadow: 0 0 6px var(--accent-red); }
+    .service-chip .dot-idle { background: var(--accent-amber); }
+
+    .live-table th { background: rgba(59,130,246,0.06); }
+    .live-table tr:hover { background: rgba(59,130,246,0.04); }
+    .val-cell { font-weight: 600; font-family: monospace; font-size: 13px; }
+    .time-cell { font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+    .section-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .section-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.6px; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Real-time system monitoring and data overview</p>
+
+<!-- Page Header -->
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px;">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Live monitoring — auto-refreshes every 10 seconds</p>
+    </div>
+    <button onclick="location.reload()" class="btn btn-sm btn-secondary" style="margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Refresh
+    </button>
 </div>
 
-<!-- System Metrics Row -->
-<div class="grid-4 animate-in" style="margin-bottom: 24px;">
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div class="metric-value" style="color: var(--accent-blue);">{{ stats.cpu_percent }}%</div>
-                <div class="metric-label">CPU Usage</div>
-            </div>
-            <div class="metric-icon" style="background: rgba(59,130,246,0.1); font-size:13px; font-weight:600; color:var(--accent-blue);">CPU</div>
-        </div>
+<!-- System Stats -->
+<div class="grid-4 animate-in" style="margin-bottom:20px;">
+    <div class="stat-card blue">
+        <div class="stat-icon blue">CPU</div>
+        <div class="stat-value" style="color:var(--accent-blue);">{{ stats.cpu_percent }}%</div>
+        <div class="stat-label">CPU Usage</div>
     </div>
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div class="metric-value" style="color: var(--accent-purple);">{{ stats.memory_percent }}%</div>
-                <div class="metric-label">Memory ({{ stats.memory_used_mb }} / {{ stats.memory_total_mb }} MB)</div>
-            </div>
-            <div class="metric-icon" style="background: rgba(139,92,246,0.1); font-size:13px; font-weight:600; color:var(--accent-purple);">MEM</div>
-        </div>
+    <div class="stat-card purple">
+        <div class="stat-icon purple">MEM</div>
+        <div class="stat-value" style="color:var(--accent-purple);">{{ stats.memory_percent }}%</div>
+        <div class="stat-label">Memory</div>
+        <div class="stat-sub">{{ stats.memory_used_mb }} / {{ stats.memory_total_mb }} MB</div>
     </div>
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div class="metric-value" style="color: var(--accent-green);">{{ uptime_str }}</div>
-                <div class="metric-label">Uptime</div>
-            </div>
-            <div class="metric-icon" style="background: rgba(16,185,129,0.1); font-size:13px; font-weight:600; color:var(--accent-green);">UP</div>
-        </div>
+    <div class="stat-card green">
+        <div class="stat-icon green">UP</div>
+        <div class="stat-value" style="color:var(--accent-green); font-size:20px; margin-top:4px;">{{ uptime_str }}</div>
+        <div class="stat-label">Uptime</div>
     </div>
-    <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div>
-                <div class="metric-value" style="color: var(--accent-amber);">{{ stats.disk_percent }}%</div>
-                <div class="metric-label">Disk ({{ stats.disk_used_gb }} / {{ stats.disk_total_gb }} GB)</div>
-            </div>
-            <div class="metric-icon" style="background: rgba(245,158,11,0.1); font-size:13px; font-weight:600; color:var(--accent-amber);">DSK</div>
-        </div>
+    <div class="stat-card amber">
+        <div class="stat-icon amber">DSK</div>
+        <div class="stat-value" style="color:var(--accent-amber);">{{ stats.disk_percent }}%</div>
+        <div class="stat-label">Disk</div>
+        <div class="stat-sub">{{ stats.disk_used_gb }} / {{ stats.disk_total_gb }} GB</div>
     </div>
 </div>
 
-<!-- Cloud & Buffer Row -->
-<div class="grid-3 animate-in" style="margin-bottom: 24px; animation-delay: 0.1s;">
-    <!-- Cloud Connection Card -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">Cloud Connection</span>
-            {% if cloud_connected %}
-            <span class="badge badge-green"><span class="status-dot green"></span> Connected</span>
-            {% elif cloud_status == 'Buffering' %}
-            <span class="badge badge-amber"><span class="status-dot amber"></span> Buffering</span>
-            {% else %}
-            <span class="badge badge-red"><span class="status-dot red"></span> Disconnected</span>
-            {% endif %}
-        </div>
-        <div style="color: var(--text-secondary); font-size: 13px;">
-            <p>Status: <strong>{{ cloud_status }}</strong></p>
-            <p style="margin-top:4px;">Bus Queue: {{ pending_bus_events }} events</p>
-        </div>
+<!-- Status Row -->
+<div class="status-row animate-in" style="animation-delay:0.05s;">
+    <!-- Cloud Connection -->
+    <div class="status-pill" style="border-color: {% if cloud_connected %}rgba(16,185,129,0.4){% else %}rgba(239,68,68,0.4){% endif %};">
+        <span class="status-dot {% if cloud_connected %}green pulse{% else %}red{% endif %}"></span>
+        <span>Cloud: <strong>{{ cloud_status }}</strong></span>
     </div>
 
-    <!-- Buffer Status Card -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">Buffer Status</span>
-        </div>
-        <div style="display:flex; gap:32px;">
-            <div>
-                <div class="metric-value" style="font-size:24px; color:var(--accent-amber);">{{ unsent_count }}</div>
-                <div class="metric-label">Unsent Events</div>
-            </div>
-            <div>
-                <div class="metric-value" style="font-size:24px; color:var(--accent-blue);">{{ total_count }}</div>
-                <div class="metric-label">Total Buffered</div>
-            </div>
-        </div>
+    <!-- Buffer -->
+    <div class="status-pill" style="border-color:{% if unsent_count > 0 %}rgba(245,158,11,0.4){% else %}rgba(42,53,72,0.8){% endif %};">
+        <span class="status-dot {% if unsent_count > 0 %}amber{% else %}green{% endif %}"></span>
+        <span>Buffer: <strong>{{ unsent_count }}</strong> unsent &nbsp;/&nbsp; <strong>{{ total_count }}</strong> total</span>
     </div>
 
-    <!-- Adapter Summary Card -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title">Adapters</span>
-            <a href="/adapters" class="btn btn-sm btn-secondary">Manage</a>
-        </div>
-        <div style="color: var(--text-secondary); font-size: 14px;">
-            {% if adapters %}
-                {% set running = adapters|selectattr('status', 'equalto', 'connected')|list|length %}
-                <p><strong>{{ adapters|length }}</strong> configured, <strong>{{ running }}</strong> running</p>
-            {% else %}
-                <p>No adapters configured</p>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- Watchdog Task Statuses -->
-{% if task_statuses %}
-<div class="card animate-in" style="margin-bottom: 24px; animation-delay: 0.15s;">
-    <div class="card-header">
-        <span class="card-title">Watchdog Services</span>
-    </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-        {% for name, status in task_statuses.items() %}
-        <div style="display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--bg-input); border-radius:8px; font-size:13px;">
-            {% if status == 'running' %}
-            <span class="status-dot green pulse"></span>
-            {% elif 'crashed' in status %}
-            <span class="status-dot red pulse"></span>
-            {% else %}
+    <!-- Adapters -->
+    <div class="status-pill">
+        {% if adapters %}
+            {% set running = adapters|selectattr('status', 'equalto', 'connected')|list|length %}
+            <span class="status-dot {% if running > 0 %}green{% else %}amber{% endif %}"></span>
+            <span>Adapters: <strong>{{ running }}</strong> running / <strong>{{ adapters|length }}</strong> total</span>
+        {% else %}
             <span class="status-dot amber"></span>
-            {% endif %}
-            <span style="font-weight:500;">{{ name }}</span>
-            <span style="color:var(--text-muted);">{{ status }}</span>
+            <span>No adapters configured</span>
+        {% endif %}
+        <a href="/adapters" class="btn btn-sm btn-secondary" style="padding:4px 10px; font-size:11px; margin-left:auto;">Manage</a>
+    </div>
+
+    <!-- Bus Queue -->
+    <div class="status-pill">
+        <span class="status-dot {% if pending_bus_events > 0 %}amber{% else %}green{% endif %}"></span>
+        <span>Bus Queue: <strong>{{ pending_bus_events }}</strong> events</span>
+    </div>
+</div>
+
+<!-- Watchdog Services -->
+{% if task_statuses %}
+<div class="card animate-in" style="margin-bottom:20px; animation-delay:0.1s;">
+    <div class="section-header">
+        <span class="section-title">Watchdog Services</span>
+        <span class="badge badge-amber" style="font-size:11px;">{{ task_statuses|length }} tasks</span>
+    </div>
+    <div class="service-chips">
+        {% for name, status in task_statuses.items() %}
+        <div class="service-chip">
+            <span class="status-dot
+                {% if status == 'running' %}dot-run pulse
+                {% elif 'crashed' in status %}dot-err pulse
+                {% else %}dot-idle{% endif %}">
+            </span>
+            <span>{{ name }}</span>
+            <span style="color:var(--text-muted); font-size:11px;">{{ status }}</span>
         </div>
         {% endfor %}
     </div>
@@ -126,20 +175,26 @@
 {% endif %}
 
 <!-- Live Data Feed -->
-<div class="card animate-in" style="animation-delay: 0.2s;">
-    <div class="card-header">
-        <span class="card-title">Live Data Feed</span>
-        <button onclick="refreshData()" class="btn btn-sm btn-secondary">Refresh</button>
+<div class="card animate-in" style="animation-delay:0.15s;">
+    <div class="section-header">
+        <span class="section-title">Live Data Feed</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+            {% if recent_events %}
+            <span class="badge badge-green" style="font-size:11px;">{{ recent_events|length }} events</span>
+            {% endif %}
+            <button onclick="location.reload()" class="btn btn-sm btn-secondary">Refresh</button>
+        </div>
     </div>
+
     {% if recent_events %}
     <div style="overflow-x:auto;">
-        <table class="data-table" id="live-feed-table">
+        <table class="data-table live-table">
             <thead>
                 <tr>
                     <th>Time</th>
                     <th>Adapter</th>
-                    <th>Tag</th>
-                    <th>Node</th>
+                    <th>Thing</th>
+                    <th>Tag / Metric</th>
                     <th>Value</th>
                     <th>Quality</th>
                     <th>Status</th>
@@ -148,25 +203,29 @@
             <tbody>
                 {% for event in recent_events %}
                 <tr>
-                    <td style="color:var(--text-muted); font-size:12px; font-family:monospace;">
-                        {{ event.timestamp.astimezone().strftime('%H:%M:%S') if event.timestamp else '' }}
+                    <td class="time-cell">{{ event.timestamp.astimezone().strftime('%H:%M:%S') if event.timestamp else '' }}</td>
+                    <td><span class="badge badge-blue" style="font-size:11px;">{{ event.adapter_name }}</span></td>
+                    <td style="font-size:12px; color:var(--text-secondary);">{{ event.thing_key or '—' }}</td>
+                    <td style="font-family:monospace; font-size:12px;">
+                        {% if event.metric_id %}
+                        <span style="color:var(--accent-blue);">{{ event.metric_id }}</span>
+                        {% else %}
+                        {{ event.tag_id or event.node_id }}
+                        {% endif %}
                     </td>
-                    <td><span class="badge badge-blue">{{ event.adapter_name }}</span></td>
-                    <td style="font-family:monospace; font-size:12px;">{{ event.tag_id or event.node_id }}</td>
-                    <td style="font-family:monospace; font-size:12px;">ns={{ event.namespace }};i={{ event.node_id }}</td>
-                    <td><strong>{{ event.value }}</strong></td>
+                    <td class="val-cell">{{ event.value }}</td>
                     <td>
                         {% if event.quality == 'Good' %}
-                        <span style="color:var(--accent-green);">✓ Good</span>
+                        <span style="color:var(--accent-green); font-size:12px;">✓ Good</span>
                         {% else %}
-                        <span style="color:var(--accent-red);">✗ {{ event.quality }}</span>
+                        <span style="color:var(--accent-red); font-size:12px;">✗ {{ event.quality }}</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if event.sent %}
-                        <span class="badge badge-green" style="font-size:11px;">Sent</span>
+                        <span class="badge badge-green" style="font-size:10px;">Sent</span>
                         {% else %}
-                        <span class="badge badge-amber" style="font-size:11px;">Buffered</span>
+                        <span class="badge badge-amber" style="font-size:10px;">Buffered</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -175,33 +234,19 @@
         </table>
     </div>
     {% else %}
-    <div class="empty-state">
-        <div class="empty-state-icon" style="font-size:28px; color:var(--text-muted);">No Data</div>
-        <p class="empty-state-text">No events yet. Configure and start an adapter to begin collecting data.</p>
-        <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
+    <div class="empty-state" style="padding:40px 24px;">
+        <div class="empty-state-icon" style="font-size:36px; opacity:0.4;">📡</div>
+        <p class="empty-state-text" style="font-size:14px;">No events yet.<br>Configure and start an adapter to begin collecting data.</p>
+        <a href="/adapters/new" class="btn btn-primary" style="margin-top:4px;">Add Adapter</a>
     </div>
     {% endif %}
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Auto-refresh dashboard every 5 seconds
-    let refreshTimer;
-
-    function refreshData() {
-        fetch('/api/status')
-            .then(r => r.json())
-            .then(data => {
-                // Update metrics live without full page reload
-                document.title = `Dashboard — Edge Server (${data.cloud_connected ? 'Online' : 'Offline'})`;
-            })
-            .catch(err => console.log('Refresh failed:', err));
-    }
-
     // Auto-refresh every 10 seconds
-    refreshTimer = setInterval(() => {
-        location.reload();
-    }, 10000);
+    setTimeout(() => location.reload(), 10000);
 </script>
 {% endblock %}

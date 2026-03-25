@@ -105,6 +105,49 @@ class HttpCloudConnector:
             self.connected = False
         return self.connected
 
+    # ── fetch registered things ───────────────────────────────
+
+    async def fetch_things(self) -> list[dict]:
+        """Fetch all registered Things from the Datonis account.
+
+        Returns a list of dicts with: thing_key, name, metrics.
+        Raises an exception with a descriptive message on failure.
+        """
+        if not self._client:
+            raise RuntimeError("Cloud client not started")
+
+        body = "{}"
+        headers = self._sign(body)
+        try:
+            resp = await self._client.get(
+                "/api/v3/things.json",
+                headers={"X-Access-Key": headers["X-Access-Key"],
+                         "X-Dtn-Signature": self._sign("")["X-Dtn-Signature"]},
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise RuntimeError(f"Network error fetching things: {exc}") from exc
+
+        if resp.status_code in (401, 403):
+            raise RuntimeError("Authentication failed — check API key and secret key in Settings")
+        if resp.status_code != 200:
+            raise RuntimeError(f"Datonis returned HTTP {resp.status_code}: {resp.text[:300]}")
+
+        data = resp.json()
+        # Datonis returns {"things": [...]} or a direct list
+        things_raw = data.get("things", data) if isinstance(data, dict) else data
+        things = []
+        for t in (things_raw if isinstance(things_raw, list) else []):
+            things.append({
+                "thing_key": t.get("thing_key") or t.get("uid") or t.get("key", ""),
+                "name": t.get("name", ""),
+                "metrics": [
+                    {"key": m.get("key", m) if isinstance(m, dict) else m,
+                     "display_name": m.get("display_name", "") if isinstance(m, dict) else ""}
+                    for m in t.get("metrics", t.get("properties", []))
+                ],
+            })
+        return things
+
     # ── publish events ────────────────────────────────────────
 
     async def publish(self, events: list[DataEvent]) -> bool | None:
@@ -226,6 +269,49 @@ class HttpCloudConnector:
         except Exception as exc:
             logger.error(f"Cloud publish unexpected error: {exc}")
             self.connected = False
+            return False
+
+    # ── gateway snapshot ──────────────────────────────────────
+
+    async def send_gateway_snapshot(self, gateway_key: str, snapshot_data: dict) -> bool:
+        """POST a configuration snapshot to the Datonis gateway endpoint.
+
+        Uses the gateway_key (not the access/secret key pair) for authentication.
+        Returns True on success, False on failure.
+        """
+        if not self._client or not gateway_key:
+            return False
+        try:
+            payload = {
+                "gateway_key": gateway_key,
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+                "configuration": snapshot_data,
+            }
+            body = json.dumps(payload, separators=(",", ":"))
+            # Gateway snapshot uses gateway_key as the access key with HMAC signing
+            sig = hmac.new(
+                gateway_key.encode("utf-8"),
+                body.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            headers = {
+                "Content-Type": "application/json",
+                "X-Gateway-Key": gateway_key,
+                "X-Dtn-Signature": sig,
+            }
+            resp = await self._client.post(
+                "/api/v3/gateway/configurations.json",
+                content=body,
+                headers=headers,
+            )
+            if resp.status_code in (200, 201, 202):
+                logger.info("☁️  Gateway snapshot sent to Datonis cloud")
+                return True
+            else:
+                logger.warning(f"Gateway snapshot rejected: HTTP {resp.status_code} — {resp.text[:300]}")
+                return False
+        except Exception as exc:
+            logger.warning(f"Gateway snapshot send failed: {exc}")
             return False
 
     # ── heartbeat ─────────────────────────────────────────────

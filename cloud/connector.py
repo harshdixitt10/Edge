@@ -62,7 +62,8 @@ class SendAggregator:
 
         For each thing whose send interval has elapsed:
           - Pick the LATEST value per metric (most recent timestamp)
-          - If latest is missing, use second-latest
+          - Normalize all flushed events to the same max timestamp so that
+            multiple metrics for the same thing merge into one cloud payload entry
           - Clear the buffer for that thing
         """
         ready: list[DataEvent] = []
@@ -74,13 +75,21 @@ class SendAggregator:
 
             if (now - last) >= interval:
                 # Time to send — pick latest value per metric
+                thing_events: list[DataEvent] = []
                 for metric_key, events in metrics.items():
                     if not events:
                         continue
                     # Sort by timestamp descending, pick the latest
                     events.sort(key=lambda e: e.timestamp, reverse=True)
-                    latest = events[0]
-                    ready.append(latest)
+                    thing_events.append(events[0])
+
+                if thing_events:
+                    # Normalize all metrics to the same timestamp (the max among them)
+                    # so they merge into a single cloud payload entry: {data: {m1:v1, m2:v2}}
+                    max_ts = max(e.timestamp for e in thing_events)
+                    for e in thing_events:
+                        e.timestamp = max_ts
+                    ready.extend(thing_events)
 
                 # Clear buffer and update flush time
                 self._buffers[thing_key] = defaultdict(list)

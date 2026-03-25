@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 templates: Jinja2Templates = None
 config_manager = None
 cloud_connector = None
+auth_manager = None
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -30,6 +32,8 @@ async def settings_page(request: Request):
         "config": config,
         "cloud_connected": cloud_connected,
         "success": request.query_params.get("saved") == "1",
+        "pw_success": request.query_params.get("pw_saved") == "1",
+        "pw_error": request.query_params.get("pw_error", ""),
     })
 
 
@@ -39,6 +43,7 @@ async def save_cloud_settings(
     endpoint_url: str = Form(...),
     api_key: str = Form(""),
     secret_key: str = Form(""),
+    gateway_key: str = Form(""),
     edge_id: str = Form(...),
     timeout_secs: int = Form(10),
     batch_size: int = Form(100),
@@ -53,11 +58,15 @@ async def save_cloud_settings(
                 config.cloud.api_key = api_key
             if secret_key:
                 config.cloud.secret_key = secret_key
+            if gateway_key:
+                config.cloud.gateway_key = gateway_key
             config.cloud.edge_id = edge_id
             config.cloud.timeout_secs = timeout_secs
             config.cloud.batch_size = batch_size
             config.cloud.heartbeat_interval_secs = heartbeat_interval_secs
             config.cloud.ssl_verify = ssl_verify
+
+        await snapshots_routes.capture_snapshot("cloud_settings", "Cloud settings updated")
 
         # Reinitialize cloud connector with new credentials
         if cloud_connector:
@@ -86,6 +95,34 @@ async def save_retention_settings(
         cfg.database.retention_days = retention_days
         config_manager.save()
     return RedirectResponse("/settings?saved=1", status_code=302)
+
+
+@router.post("/settings/change-password")
+async def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    """Change the admin password."""
+    if new_password != confirm_password:
+        return RedirectResponse("/settings?pw_error=Passwords+do+not+match", status_code=302)
+
+    if len(new_password) < 6:
+        return RedirectResponse("/settings?pw_error=Password+must+be+at+least+6+characters", status_code=302)
+
+    if not config_manager or not auth_manager:
+        return RedirectResponse("/settings?pw_error=Service+unavailable", status_code=302)
+
+    cfg = config_manager.config.auth
+    if not auth_manager.verify_password(current_password, cfg.default_password_hash):
+        return RedirectResponse("/settings?pw_error=Current+password+is+incorrect", status_code=302)
+
+    new_hash = auth_manager.hash_password(new_password)
+    with config_manager.update_config() as config:
+        config.auth.default_password_hash = new_hash
+
+    return RedirectResponse("/settings?pw_saved=1", status_code=302)
 
 
 @router.post("/api/settings/test-cloud")

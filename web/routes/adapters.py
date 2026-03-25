@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from adapters.opcua_adapter import test_opcua_connection
 from core.models import OpcuaAdapterConfig
+from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
 
@@ -20,6 +21,8 @@ router = APIRouter()
 templates: Jinja2Templates = None
 store = None
 watchdog = None
+config_manager = None
+http_connector = None
 
 
 @router.get("/adapters", response_class=HTMLResponse)
@@ -98,6 +101,10 @@ async def opcua_save(request: Request):
         if watchdog:
             watchdog.restart_task("adapters")
 
+        await snapshots_routes.capture_snapshot(
+            trigger="adapter_saved",
+            name=f"Adapter saved: {adapter_name}",
+        )
         return RedirectResponse("/adapters", status_code=302)
 
     except Exception as e:
@@ -115,7 +122,10 @@ async def opcua_save(request: Request):
 async def adapter_delete(adapter_id: str):
     """Delete an adapter."""
     if store:
+        adapter = await store.get_adapter(adapter_id)
+        name = adapter["name"] if adapter else adapter_id
         await store.delete_adapter(adapter_id)
+        await snapshots_routes.capture_snapshot("adapter_deleted", f"Adapter deleted: {name}")
         if watchdog:
             watchdog.restart_task("adapters")
     return RedirectResponse("/adapters", status_code=302)
@@ -123,15 +133,46 @@ async def adapter_delete(adapter_id: str):
 
 @router.post("/adapters/{adapter_id}/toggle")
 async def adapter_toggle(adapter_id: str):
-    """Enable/disable an adapter."""
+    """Toggle adapter enabled/disabled state."""
     if store:
         adapter = await store.get_adapter(adapter_id)
         if adapter:
-            new_status = "stopped" if adapter["status"] == "connected" else "connecting"
-            await store.update_adapter_status(adapter_id, new_status)
+            new_enabled = not adapter["enabled"]
+            new_status = "stopped" if not new_enabled else "connecting"
+            await store.toggle_adapter_enabled(adapter_id, new_enabled, new_status)
             if watchdog:
                 watchdog.restart_task("adapters")
     return RedirectResponse("/adapters", status_code=302)
+
+
+@router.post("/adapters/opcua/import", response_class=HTMLResponse)
+async def opcua_import(request: Request):
+    """Re-render the config form pre-populated with an uploaded JSON config."""
+    form = await request.form()
+    adapter_id = form.get("adapter_id", "")
+    adapter_name = form.get("adapter_name", "")
+    config_json_str = form.get("config_json", "{}")
+    try:
+        config_data = json.loads(config_json_str)
+        validated = OpcuaAdapterConfig(**config_data)
+        config = validated.model_dump()
+        error = None
+    except Exception as e:
+        config_data = {}
+        try:
+            config = json.loads(config_json_str)
+        except Exception:
+            config = {}
+        error = f"JSON imported but has validation warnings: {e}"
+    return templates.TemplateResponse("opcua_config.html", {
+        "request": request,
+        "adapter_id": adapter_id,
+        "adapter_name": adapter_name,
+        "config": config,
+        "is_edit": bool(adapter_id),
+        "error": error,
+        "success": None if error else "JSON config imported successfully. Review and save.",
+    })
 
 
 @router.post("/api/adapters/test-connection")
@@ -150,3 +191,15 @@ async def get_adapter_config(adapter_id: str):
         if adapter:
             return JSONResponse(json.loads(adapter["config_json"]))
     return JSONResponse({"error": "Adapter not found"}, status_code=404)
+
+
+@router.get("/api/adapters/sync-things")
+async def sync_things_from_cloud():
+    """Fetch registered Things from Datonis cloud using current API credentials."""
+    if not http_connector:
+        return JSONResponse({"success": False, "message": "Cloud connector not available"})
+    try:
+        things = await http_connector.fetch_things()
+        return JSONResponse({"success": True, "things": things})
+    except Exception as e:
+        return JSONResponse({"success": False, "message": str(e)})

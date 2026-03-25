@@ -1,0 +1,36 @@
+# ── Datonis Edge Server Configuration Template ──────────────────────────────
+# Copy this file to config.yaml and fill in your values before first launch.
+# ─────────────────────────────────────────────────────────────────────────────
+
+server:
+  host: 0.0.0.0
+  port: 8090
+  # IMPORTANT: Change this to a random secret string before deploying
+  secret_key: CHANGE-ME-BEFORE-DEPLOYING
+  debug: false
+
+auth:
+  default_username: admin
+  # Default password: changeme  (change via Settings after first login)
+  default_password_hash: "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGqnpuBCRVCNc1KWDV7pWOz4rHi"
+
+cloud:
+  protocol: https
+  endpoint_url: https://api.datonis.io:443
+  api_key: ""
+  secret_key: ""
+  gateway_key: ""
+  edge_id: edge-001
+  timeout_secs: 10
+  batch_size: 100
+  heartbeat_interval_secs: 60
+  retry_on_status: [500, 502, 503, 504]
+  ssl_verify: true
+
+database:
+  path: data/edge_server.db
+  retention_days: 7
+
+logging:
+  level: INFO
+  file: ../logs/edge_server.log

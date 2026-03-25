@@ -10,6 +10,12 @@
 {% if success %}
 <div class="alert alert-success animate-in">Settings saved successfully!</div>
 {% endif %}
+{% if pw_success %}
+<div class="alert alert-success animate-in">Password changed successfully!</div>
+{% endif %}
+{% if pw_error %}
+<div class="alert alert-error animate-in">{{ pw_error }}</div>
+{% endif %}
 
 <!-- Cloud Connection Settings -->
 <div class="card animate-in" style="margin-bottom:24px;">
@@ -46,6 +52,13 @@
                 <input type="text" name="edge_id" class="form-input"
                        value="{{ config.cloud.edge_id if config else 'edge-plant-01' }}"
                        placeholder="edge-plant-01">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="gateway_key">Gateway Key</label>
+                <input type="text" class="form-input" id="gateway_key" name="gateway_key"
+                       value="{{ config.cloud.gateway_key if config and config.cloud.gateway_key else '' }}"
+                       placeholder="Enter Gateway Key (optional)" style="font-size:15px; font-family:monospace;">
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Optional Gateway Key for sending snapshots to Datonis. Leave blank to keep current key.</p>
             </div>
             <div class="form-group">
                 <label class="form-label">Request Timeout (secs)</label>
@@ -138,8 +151,32 @@ async function testCloudConnection() {
     </form>
 </div>
 
+<!-- Change Password -->
+<div class="card animate-in" style="margin-bottom:24px; animation-delay:0.2s;">
+    <div class="card-header">
+        <span class="card-title">Change Password</span>
+    </div>
+    <form method="POST" action="/settings/change-password">
+        <div class="grid-2">
+            <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">Current Password</label>
+                <input type="password" name="current_password" class="form-input" placeholder="Enter current password" required autocomplete="current-password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" name="new_password" class="form-input" placeholder="At least 6 characters" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" name="confirm_password" class="form-input" placeholder="Repeat new password" required autocomplete="new-password">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Change Password</button>
+    </form>
+</div>
+
 <!-- System Info (read-only) -->
-<div class="card animate-in" style="animation-delay:0.15s;">
+<div class="card animate-in" style="animation-delay:0.25s;">
     <div class="card-header">
         <span class="card-title">System Information</span>
     </div>

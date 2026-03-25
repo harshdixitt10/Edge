@@ -119,14 +119,10 @@
         .sidebar-logo-icon {
             width: 36px;
             height: 36px;
-            background: var(--gradient-primary);
-            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
-            color: white;
+            flex-shrink: 0;
         }
 
         .sidebar-logo-text {
@@ -241,7 +237,7 @@
         .theme-toggle-track {
             position: absolute;
             inset: 0;
-            background: var(--border-color);
+            background: #6b7280;
             border-radius: 26px;
             transition: var(--transition);
             display: flex;
@@ -481,10 +477,15 @@
         .toggle-slider {
             position: absolute;
             inset: 0;
-            background: var(--border-color);
+            background: #6b7280;
             border-radius: 24px;
             cursor: pointer;
             transition: var(--transition);
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+
+        [data-theme="light"] .toggle-slider {
+            background: #9ca3af;
         }
 
         .toggle-slider::before {
@@ -493,14 +494,16 @@
             height: 18px;
             width: 18px;
             left: 3px;
-            bottom: 3px;
+            bottom: 2px;
             background: white;
             border-radius: 50%;
             transition: var(--transition);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         .toggle-switch input:checked + .toggle-slider {
             background: var(--accent-blue);
+            border-color: var(--accent-blue);
         }
 
         .toggle-switch input:checked + .toggle-slider::before {
@@ -765,6 +768,69 @@
             font-size: 15px;
             margin-bottom: 20px;
         }
+
+        /* ── App Modal (confirm / prompt / alert) ── */
+        #app-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        #app-modal-overlay.show { display: flex; }
+
+        #app-modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            width: 440px;
+            max-width: 92vw;
+            padding: 28px;
+            box-shadow: var(--shadow-lg);
+            animation: fade-in 0.15s ease;
+        }
+
+        #app-modal-icon {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        #app-modal-title {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        #app-modal-message {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.6;
+            white-space: pre-line;
+        }
+
+        #app-modal-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: var(--font);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        #app-modal-input:focus { outline: none; border-color: var(--border-focus); }
+
+        #app-modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -775,10 +841,39 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <a href="/dashboard" class="sidebar-logo">
-                    <div class="sidebar-logo-icon">ES</div>
+                    <div class="sidebar-logo-icon">
+                        <svg width="36" height="36" viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="sbHexGrad" x1="0" y1="0" x2="40" y2="46" gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#fb923c"/>
+                                    <stop offset="55%" stop-color="#f43f87"/>
+                                    <stop offset="100%" stop-color="#db2777"/>
+                                </linearGradient>
+                            </defs>
+                            <!-- Rounded hexagon -->
+                            <path d="M20 1 L37 10.5 L37 35.5 L20 45 L3 35.5 L3 10.5 Z" fill="url(#sbHexGrad)"/>
+                            <!-- Row 1: dots + line -->
+                            <circle cx="12" cy="15" r="2.5" fill="white"/>
+                            <circle cx="28" cy="15" r="2.5" fill="white"/>
+                            <line x1="14.5" y1="15" x2="25.5" y2="15" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                            <!-- Row 2: dots + line -->
+                            <circle cx="12" cy="23" r="2.5" fill="white"/>
+                            <circle cx="28" cy="23" r="2.5" fill="white"/>
+                            <line x1="14.5" y1="23" x2="25.5" y2="23" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                            <!-- Row 3: dots + line -->
+                            <circle cx="12" cy="31" r="2.5" fill="white"/>
+                            <circle cx="28" cy="31" r="2.5" fill="white"/>
+                            <line x1="14.5" y1="31" x2="25.5" y2="31" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                            <!-- Vertical connectors (right side) -->
+                            <line x1="28" y1="17.5" x2="28" y2="20.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                            <line x1="28" y1="25.5" x2="28" y2="28.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <div>
-                        <div class="sidebar-logo-text">Datonis Edge</div>
-                        <div class="sidebar-logo-sub">Industrial IoT Gateway</div>
+                        <div style="line-height:1.1;">
+                            <div style="font-size:10px; font-weight:600; letter-spacing:1.5px; color:#f97316; text-transform:uppercase;">DATONIS</div>
+                            <div style="font-size:18px; font-weight:800; letter-spacing:0px; color:var(--text-primary);">EDGE</div>
+                        </div>
                     </div>
                 </a>
             </div>
@@ -807,6 +902,12 @@
                     </span>
                     Settings
                 </a>
+                <a href="/snapshots" class="nav-item {% if request.url.path == '/snapshots' %}active{% endif %}">
+                    <span class="nav-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </span>
+                    Snapshots
+                </a>
             </nav>
             <div class="sidebar-footer">
                 <div class="theme-toggle-wrapper">
@@ -834,6 +935,17 @@
     </div>
     {% endblock %}
 
+    <!-- ── Global App Modal ── -->
+    <div id="app-modal-overlay">
+        <div id="app-modal-box">
+            <div id="app-modal-icon"></div>
+            <div id="app-modal-title"></div>
+            <div id="app-modal-message"></div>
+            <input id="app-modal-input" type="text" style="display:none;" placeholder="">
+            <div id="app-modal-buttons"></div>
+        </div>
+    </div>
+
     <script>
         // ── Theme Toggle ──
         function toggleTheme() {
@@ -852,6 +964,83 @@
             const sw = document.getElementById('theme-switch');
             if (sw) sw.checked = (saved === 'dark');
         })();
+    </script>
+
+    <script>
+        // ── AppModal — replaces confirm() / alert() / prompt() ──
+        const AppModal = {
+            _resolve: null,
+
+            _show({ icon = '', title = '', message = '', inputDefault = null, confirmText = 'OK', confirmDanger = false, cancelText = 'Cancel', showCancel = true }) {
+                document.getElementById('app-modal-icon').textContent = icon;
+                document.getElementById('app-modal-title').textContent = title;
+                document.getElementById('app-modal-message').textContent = message;
+
+                const inp = document.getElementById('app-modal-input');
+                if (inputDefault !== null) {
+                    inp.style.display = 'block';
+                    inp.value = inputDefault;
+                    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+                } else {
+                    inp.style.display = 'none';
+                }
+
+                const btns = document.getElementById('app-modal-buttons');
+                btns.innerHTML = '';
+
+                if (showCancel) {
+                    const cancel = document.createElement('button');
+                    cancel.className = 'btn btn-secondary';
+                    cancel.textContent = cancelText;
+                    cancel.onclick = () => this._close(false);
+                    btns.appendChild(cancel);
+                }
+
+                const confirm = document.createElement('button');
+                confirm.className = confirmDanger ? 'btn btn-danger' : 'btn btn-primary';
+                confirm.textContent = confirmText;
+                confirm.onclick = () => this._close(true);
+                btns.appendChild(confirm);
+
+                const overlay = document.getElementById('app-modal-overlay');
+                overlay.classList.add('show');
+
+                // Enter key submits
+                inp.onkeydown = (e) => { if (e.key === 'Enter') this._close(true); };
+
+                return new Promise(res => { this._resolve = res; });
+            },
+
+            _close(confirmed) {
+                const inp = document.getElementById('app-modal-input');
+                const value = inp.value;
+                document.getElementById('app-modal-overlay').classList.remove('show');
+                if (this._resolve) {
+                    this._resolve({ confirmed, value });
+                    this._resolve = null;
+                }
+            },
+
+            async confirm(message, { title = 'Confirm', icon = '⚠️', confirmText = 'Confirm', danger = false } = {}) {
+                const r = await this._show({ icon, title, message, confirmText, confirmDanger: danger, showCancel: true });
+                return r.confirmed;
+            },
+
+            async alert(message, { title = 'Notice', icon = 'ℹ️' } = {}) {
+                await this._show({ icon, title, message, confirmText: 'OK', showCancel: false });
+            },
+
+            async prompt(message, defaultValue = '', { title = 'Input', icon = '✏️', confirmText = 'OK' } = {}) {
+                const r = await this._show({ icon, title, message, inputDefault: defaultValue, confirmText, showCancel: true });
+                if (!r.confirmed) return null;
+                return r.value;
+            },
+        };
+
+        // Close on overlay click
+        document.getElementById('app-modal-overlay').addEventListener('click', function(e) {
+            if (e.target === this) AppModal._close(false);
+        });
     </script>
 
     {% block scripts %}{% endblock %}

@@ -1,12 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — Edge Server</title>
+    <title>Login — Datonis Edge</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Dark Theme (default) ── */
+        :root, [data-theme="dark"] {
+            --bg-body: #0a0e1a;
+            --bg-card: rgba(26, 35, 50, 0.85);
+            --border: rgba(42, 53, 72, 0.6);
+            --text-primary: #e8ecf4;
+            --text-secondary: #8b95a8;
+            --text-footer: #5a6577;
+            --input-bg: #0d1321;
+            --input-border: #2a3548;
+            --input-border-focus: #3b82f6;
+            --circle-opacity: 0.07;
+        }
+
+        /* ── Light Theme ── */
+        [data-theme="light"] {
+            --bg-body: #f0f4f8;
+            --bg-card: rgba(255, 255, 255, 0.92);
+            --border: rgba(209, 217, 230, 0.8);
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-footer: #a0aec0;
+            --input-bg: #f5f7fa;
+            --input-border: #d1d9e6;
+            --input-border-focus: #3b82f6;
+            --circle-opacity: 0.05;
+        }
 
         body {
             font-family: 'Inter', -apple-system, sans-serif;
@@ -14,9 +42,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #0a0e1a;
-            color: #e8ecf4;
+            background: var(--bg-body);
+            color: var(--text-primary);
             overflow: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         /* Animated background */
@@ -25,12 +54,13 @@
             inset: 0;
             z-index: 0;
             overflow: hidden;
+            pointer-events: none;
         }
 
         .bg-circle {
             position: absolute;
             border-radius: 50%;
-            opacity: 0.07;
+            opacity: var(--circle-opacity);
             animation: float 25s ease-in-out infinite;
         }
 
@@ -40,7 +70,6 @@
             top: -100px; left: -100px;
             animation-delay: 0s;
         }
-
         .bg-circle:nth-child(2) {
             width: 400px; height: 400px;
             background: #8b5cf6;
@@ -48,7 +77,6 @@
             animation-delay: -8s;
             animation-duration: 30s;
         }
-
         .bg-circle:nth-child(3) {
             width: 300px; height: 300px;
             background: #10b981;
@@ -60,9 +88,9 @@
 
         @keyframes float {
             0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(30px, -30px) scale(1.05); }
-            50% { transform: translate(-20px, 20px) scale(0.95); }
-            75% { transform: translate(10px, 10px) scale(1.02); }
+            25%  { transform: translate(30px, -30px) scale(1.05); }
+            50%  { transform: translate(-20px, 20px) scale(0.95); }
+            75%  { transform: translate(10px, 10px) scale(1.02); }
         }
 
         .login-container {
@@ -74,18 +102,18 @@
         }
 
         .login-card {
-            background: rgba(26, 35, 50, 0.8);
+            background: var(--bg-card);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(42, 53, 72, 0.6);
+            border: 1px solid var(--border);
             border-radius: 20px;
-            padding: 48px 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            animation: card-enter 0.6s ease forwards;
+            padding: 48px 40px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: card-enter 0.5s ease forwards;
         }
 
         @keyframes card-enter {
             from { opacity: 0; transform: translateY(20px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .login-logo {
@@ -97,49 +125,37 @@
         }
 
         .login-logo-icon {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+            width: 56px; height: 56px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            filter: drop-shadow(0 4px 12px rgba(249, 115, 22, 0.35));
         }
 
-        .login-logo-text {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        }
 
         .login-subtitle {
             font-size: 14px;
-            color: #8b95a8;
+            color: var(--text-secondary);
             text-align: center;
             margin-bottom: 32px;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
 
         .form-label {
             display: block;
             font-size: 13px;
             font-weight: 500;
-            color: #8b95a8;
+            color: var(--text-secondary);
             margin-bottom: 8px;
         }
 
         .form-input {
             width: 100%;
             padding: 12px 16px;
-            background: #0d1321;
-            border: 1px solid #2a3548;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
             border-radius: 10px;
-            color: #e8ecf4;
+            color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             font-size: 14px;
             transition: all 0.2s ease;
@@ -147,7 +163,7 @@
 
         .form-input:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: var(--input-border-focus);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
 
@@ -168,13 +184,11 @@
         }
 
         .login-btn:hover {
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45);
             transform: translateY(-1px);
         }
 
-        .login-btn:active {
-            transform: translateY(0);
-        }
+        .login-btn:active { transform: translateY(0); }
 
         .error-msg {
             background: rgba(239, 68, 68, 0.1);
@@ -188,10 +202,33 @@
         }
 
         .login-footer {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             margin-top: 24px;
+        }
+
+        .login-footer-text {
             font-size: 12px;
-            color: #5a6577;
+            color: var(--text-footer);
+        }
+
+        /* ── Theme Toggle ── */
+        .theme-btn {
+            background: none;
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .theme-btn:hover {
+            border-color: #3b82f6;
+            color: #3b82f6;
         }
     </style>
 </head>
@@ -205,8 +242,33 @@
     <div class="login-container">
         <div class="login-card">
             <div class="login-logo">
-                <div class="login-logo-icon" style="font-size:18px;">ES</div>
-                <div class="login-logo-text">Datonis Edge</div>
+                <div class="login-logo-icon">
+                    <svg width="56" height="56" viewBox="0 0 40 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="lgHexGrad" x1="0" y1="0" x2="40" y2="46" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#fb923c"/>
+                                <stop offset="55%" stop-color="#f43f87"/>
+                                <stop offset="100%" stop-color="#db2777"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M20 1 L37 10.5 L37 35.5 L20 45 L3 35.5 L3 10.5 Z" fill="url(#lgHexGrad)"/>
+                        <circle cx="12" cy="15" r="2.5" fill="white"/>
+                        <circle cx="28" cy="15" r="2.5" fill="white"/>
+                        <line x1="14.5" y1="15" x2="25.5" y2="15" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="12" cy="23" r="2.5" fill="white"/>
+                        <circle cx="28" cy="23" r="2.5" fill="white"/>
+                        <line x1="14.5" y1="23" x2="25.5" y2="23" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="12" cy="31" r="2.5" fill="white"/>
+                        <circle cx="28" cy="31" r="2.5" fill="white"/>
+                        <line x1="14.5" y1="31" x2="25.5" y2="31" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="28" y1="17.5" x2="28" y2="20.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                        <line x1="28" y1="25.5" x2="28" y2="28.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <div style="font-size:11px; font-weight:700; letter-spacing:2px; color:#f97316; text-transform:uppercase; line-height:1;">DATONIS</div>
+                    <div style="font-size:24px; font-weight:800; letter-spacing:1px; color:var(--text-primary); line-height:1.1;">EDGE</div>
+                </div>
             </div>
             <p class="login-subtitle">Sign in to your Industrial IoT Gateway</p>
 
@@ -229,9 +291,36 @@
             </form>
 
             <div class="login-footer">
-                Datonis Edge v1.0
+                <span class="login-footer-text">Datonis Edge v1.0</span>
+                <button class="theme-btn" onclick="toggleTheme()" id="theme-btn">
+                    <span id="theme-icon">☀️</span>
+                    <span id="theme-label">Light</span>
+                </button>
             </div>
         </div>
     </div>
+
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.getAttribute('data-theme') === 'dark';
+            const next = isDark ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('edge-theme', next);
+            updateThemeBtn(next);
+        }
+
+        function updateThemeBtn(theme) {
+            document.getElementById('theme-icon').textContent  = theme === 'dark' ? '☀️' : '🌙';
+            document.getElementById('theme-label').textContent = theme === 'dark' ? 'Light' : 'Dark';
+        }
+
+        // Restore saved theme on load
+        (function() {
+            const saved = localStorage.getItem('edge-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeBtn(saved);
+        })();
+    </script>
 </body>
 </html>

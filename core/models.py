@@ -157,6 +157,7 @@ class CloudConfig(BaseModel):
     endpoint_url: str = "https://api.datonis.io:443"
     api_key: str = "access key"
     secret_key: str = "secret key"
+    gateway_key: str = ""
     edge_id: str = "edge-plant-01"
     timeout_secs: int = 10
     batch_size: int = 100

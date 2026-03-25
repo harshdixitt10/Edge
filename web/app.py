@@ -86,6 +86,7 @@ def create_app(
     from web.routes import dashboard as dashboard_routes
     from web.routes import settings as settings_routes
     from web.routes import activity as activity_routes
+    from web.routes import snapshots as snapshots_routes
 
     dashboard_routes.templates = templates
     dashboard_routes.store = store
@@ -95,20 +96,30 @@ def create_app(
 
     adapters_routes.templates = templates
     adapters_routes.store = store
+    adapters_routes.config_manager = config_manager
+    adapters_routes.http_connector = cloud_connector.http if cloud_connector else None
 
     settings_routes.templates = templates
     settings_routes.config_manager = config_manager
     settings_routes.cloud_connector = cloud_connector
+    settings_routes.auth_manager = auth_manager
 
     activity_routes.templates = templates
     activity_routes.store = store
     activity_routes.cloud_connector = cloud_connector
+
+    snapshots_routes.templates = templates
+    snapshots_routes.store = store
+    snapshots_routes.config_manager = config_manager
+    snapshots_routes.watchdog = watchdog
+    snapshots_routes.http_connector = cloud_connector.http if cloud_connector else None
 
     # ── Register routes ────────────────────────────────
     app.include_router(dashboard_routes.router)
     app.include_router(adapters_routes.router)
     app.include_router(settings_routes.router)
     app.include_router(activity_routes.router)
+    app.include_router(snapshots_routes.router)
 
     # ── Root + Login routes ────────────────────────────
 
@@ -132,7 +143,7 @@ def create_app(
         if not auth_manager:
             return RedirectResponse("/dashboard", status_code=302)
 
-        # Check default user
+        # Check default user (config is single source of truth — never fall through to store)
         if config_manager:
             cfg = config_manager.config.auth
             if username == cfg.default_username:
@@ -144,8 +155,10 @@ def create_app(
                         httponly=True, max_age=cfg.jwt_expiry_minutes * 60
                     )
                     return response
+                # Wrong password for the default user — reject immediately, don't check store
+                return RedirectResponse("/login?error=Invalid+credentials", status_code=302)
 
-        # Check DB users
+        # Check DB users (for non-default users only)
         if store:
             user = await store.get_user(username)
             if user and auth_manager.verify_password(password, user["password_hash"]):

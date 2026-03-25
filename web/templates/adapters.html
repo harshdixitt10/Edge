@@ -10,6 +10,22 @@
     <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
 </div>
 
+{% block scripts %}
+<script>
+async function deleteAdapter(id, name) {
+    const ok = await AppModal.confirm(`Delete adapter "${name}"?\n\nThis will remove all configuration for this adapter.`, {
+        title: 'Delete Adapter', icon: '🗑️', confirmText: 'Delete', danger: true
+    });
+    if (!ok) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/adapters/${id}/delete`;
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{% endblock %}
+
 {% if adapters %}
 <div class="grid-2 animate-in">
     {% for adapter in adapters %}
@@ -37,19 +53,21 @@
             {% endif %}
         </div>
 
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:4px;">
             <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
-            <form method="POST" action="/adapters/{{ adapter.id }}/toggle" style="display:inline;">
-                {% if adapter.status == 'connected' %}
-                <button type="submit" class="btn btn-sm btn-secondary">Stop</button>
-                {% else %}
-                <button type="submit" class="btn btn-sm btn-primary">Start</button>
-                {% endif %}
+
+            <!-- Enable/Disable Toggle -->
+            <form method="POST" action="/adapters/{{ adapter.id }}/toggle" style="display:flex; align-items:center; gap:8px;">
+                <label class="toggle-switch" title="{{ 'Enabled — click to disable' if adapter.enabled else 'Disabled — click to enable' }}" style="cursor:pointer;">
+                    <input type="checkbox" {{ 'checked' if adapter.enabled else '' }} onchange="this.form.submit()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="font-size:12px; color:var(--text-secondary);">
+                    {{ 'Enabled' if adapter.enabled else 'Disabled' }}
+                </span>
             </form>
-            <form method="POST" action="/adapters/{{ adapter.id }}/delete" style="display:inline;"
-                  onsubmit="return confirm('Delete this adapter?');">
-                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-            </form>
+
+            <button type="button" class="btn btn-sm btn-danger" onclick="deleteAdapter('{{ adapter.id }}', '{{ adapter.name }}')">Delete</button>
         </div>
     </div>
     {% endfor %}
