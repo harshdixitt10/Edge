@@ -5,7 +5,7 @@ server:
   debug: false
 auth:
   default_username: admin
-  default_password_hash: $2b$12$wUBR/ZpAIdnywXTwrrrR4OOZhfdi9ZM9tvCZFegn9a2BcL5cflFYS
+  default_password_hash: $2b$12$85JWrVeHtZJunF4FPij6s.8hCZj9VUbdz5X1FJA2ZXY5r0BTLEON6
   jwt_expiry_minutes: 60
   jwt_algorithm: HS256
 cloud:

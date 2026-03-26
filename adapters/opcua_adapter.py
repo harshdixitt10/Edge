@@ -84,33 +84,47 @@ class SubscriptionHandler:
         self.metric_map = metric_map or {}  # tag_id -> metric_id
 
     def datachange_notification(self, node, val, data):
-        """Called by asyncua on subscription data change."""
+        """Called by asyncua on subscription data change.
+
+        tag_map maps node_id → list[tag_info] so that multiple tags
+        configured on the same OPC-UA node all get their events emitted.
+        """
         try:
             node_id_str = str(node.nodeid.Identifier)
-            tag_info = self.tag_map.get(node_id_str, {})
-            tag_id = tag_info.get("tag_id", "")
+            # tag_map values are lists — one entry per tag mapped to this node
+            tag_infos = self.tag_map.get(node_id_str)
+            if not tag_infos:
+                logger.debug(f"Received notification for unmapped node '{node_id_str}' — skipping")
+                return
 
-            event = DataEvent(
-                id=str(uuid.uuid4()),
-                adapter_name=self.adapter_name,
-                thing_key=self.thing_key,
-                node_id=node_id_str,
-                namespace=node.nodeid.NamespaceIndex,
-                tag_id=tag_id,
-                metric_id=tag_info.get("metric_id", ""),
-                value=val if val is not None else 0,
-                quality="Good",
-                timestamp=datetime.now(timezone.utc),
-            )
-
-            # Use fire-and-forget since this callback isn't async
             loop = asyncio.get_event_loop()
-            loop.create_task(self.bus.publish(event))
+            now = datetime.now(timezone.utc)
+            safe_val = val if val is not None else 0
 
-            # Update derived tag evaluator with new value
-            if self.derived_evaluator and tag_id:
-                self.derived_evaluator.update_tag(tag_id, val if val is not None else 0)
-                # Evaluate derived tags
+            for tag_info in tag_infos:
+                tag_id = tag_info.get("tag_id", "")
+                metric_id = tag_info.get("metric_id", "")
+
+                event = DataEvent(
+                    id=str(uuid.uuid4()),
+                    adapter_name=self.adapter_name,
+                    thing_key=self.thing_key,
+                    node_id=node_id_str,
+                    namespace=node.nodeid.NamespaceIndex,
+                    tag_id=tag_id,
+                    metric_id=metric_id,
+                    value=safe_val,
+                    quality="Good",
+                    timestamp=now,
+                )
+                loop.create_task(self.bus.publish(event))
+
+                # Update derived tag evaluator with new value
+                if self.derived_evaluator and tag_id:
+                    self.derived_evaluator.update_tag(tag_id, safe_val)
+
+            # Evaluate derived tags once after all tag values are updated
+            if self.derived_evaluator:
                 derived_results = self.derived_evaluator.evaluate_all()
                 for d_tag_id, d_value in derived_results:
                     d_event = DataEvent(
@@ -122,7 +136,7 @@ class SubscriptionHandler:
                         metric_id=self.metric_map.get(d_tag_id, ""),
                         value=d_value,
                         quality="Good",
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=now,
                     )
                     loop.create_task(self.bus.publish(d_event))
 
@@ -231,15 +245,29 @@ class OPCUAAdapter(BaseAdapter):
 
         source = thing.source_tags[0]
 
-        # Build tag_id -> metric_id mapping
-        tag_map = {}
+        # Build metric_map: tag_id → metric_id
         metric_map = {m.tag_id: m.metric_id for m in thing.metric_mappings}
+
+        # Build tag_map: node_id → list[tag_info]
+        # Using a list per node_id so that multiple tags mapped to the same
+        # OPC-UA node all receive their data change events (no silent overwrites).
+        tag_map: dict[str, list[dict]] = {}
         for tag in source.read_tags:
-            tag_map[tag.node_id] = {
+            entry = {
                 "tag_id": tag.tag_id,
                 "metric_id": metric_map.get(tag.tag_id, ""),
                 "namespace": tag.namespace,
             }
+            if tag.node_id not in tag_map:
+                tag_map[tag.node_id] = [entry]
+            else:
+                # Same node_id used by multiple tags — keep all of them
+                logger.warning(
+                    f"Node '{tag.node_id}' mapped to multiple tags: "
+                    f"{[t['tag_id'] for t in tag_map[tag.node_id]]} + '{tag.tag_id}' "
+                    f"— all will receive data change events"
+                )
+                tag_map[tag.node_id].append(entry)
 
         # Create derived tag evaluator if derived tags are configured
         derived_evaluator = None
@@ -262,18 +290,23 @@ class OPCUAAdapter(BaseAdapter):
         )
         self._subscriptions.append(sub)
 
-        # Subscribe to all read tags
+        # Subscribe to unique OPC-UA nodes only (tag_map keys are already deduplicated).
+        # Each node_id is subscribed once; tag_map holds ALL tags for that node.
         nodes = []
-        for tag in source.read_tags:
+        for node_id_str, tag_infos in tag_map.items():
+            namespace = tag_infos[0]["namespace"]  # all infos for a node share the same ns
             try:
-                node = self._client.get_node(f"ns={tag.namespace};i={tag.node_id}")
+                node = self._client.get_node(f"ns={namespace};i={node_id_str}")
                 nodes.append(node)
             except Exception as e:
-                logger.warning(f"Cannot get node {tag.node_id}: {e}")
+                logger.warning(f"Cannot get node {node_id_str}: {e}")
 
         if nodes:
             await sub.subscribe_data_change(nodes)
-            logger.info(f"Subscribed to {len(nodes)} OPC-UA nodes for '{thing.name}'")
+            logger.info(
+                f"Subscribed to {len(nodes)} OPC-UA node(s) for '{thing.name}' "
+                f"({len(source.read_tags)} tag(s) mapped)"
+            )
 
     async def _run_simulated(self, thing) -> None:
         """Simulated mode when asyncua is not available — generates test data."""

@@ -196,10 +196,17 @@ async def get_adapter_config(adapter_id: str):
 @router.get("/api/adapters/sync-things")
 async def sync_things_from_cloud():
     """Fetch registered Things from Datonis cloud using current API credentials."""
+    import logging as _log
+    _log.getLogger(__name__).info("sync-things requested")
+
     if not http_connector:
-        return JSONResponse({"success": False, "message": "Cloud connector not available"})
+        return JSONResponse({"success": False, "message": "Cloud connector not available — check server is running"})
+    if not http_connector._client:
+        return JSONResponse({"success": False, "message": "HTTP client not started — cloud not connected yet"})
     try:
         things = await http_connector.fetch_things()
-        return JSONResponse({"success": True, "things": things})
+        return JSONResponse({"success": True, "things": things, "count": len(things)})
     except Exception as e:
+        import traceback
+        _log.getLogger(__name__).error(f"sync-things error: {traceback.format_exc()}")
         return JSONResponse({"success": False, "message": str(e)})

@@ -108,7 +108,10 @@ class HttpCloudConnector:
     # ── fetch registered things ───────────────────────────────
 
     async def fetch_things(self) -> list[dict]:
-        """Fetch all registered Things from the Datonis account.
+        """Fetch ALL registered Things from the Datonis account.
+
+        Datonis API returns {"total_count": N, "page": P, "things": [...]}
+        with 20 things per page. Paginates until all things are collected.
 
         Returns a list of dicts with: thing_key, name, metrics.
         Raises an exception with a descriptive message on failure.
@@ -116,37 +119,55 @@ class HttpCloudConnector:
         if not self._client:
             raise RuntimeError("Cloud client not started")
 
-        body = "{}"
-        headers = self._sign(body)
-        try:
-            resp = await self._client.get(
-                "/api/v3/things.json",
-                headers={"X-Access-Key": headers["X-Access-Key"],
-                         "X-Dtn-Signature": self._sign("")["X-Dtn-Signature"]},
-            )
-        except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise RuntimeError(f"Network error fetching things: {exc}") from exc
+        all_things: list[dict] = []
+        page = 1
 
-        if resp.status_code in (401, 403):
-            raise RuntimeError("Authentication failed — check API key and secret key in Settings")
-        if resp.status_code != 200:
-            raise RuntimeError(f"Datonis returned HTTP {resp.status_code}: {resp.text[:300]}")
+        while True:
+            auth_headers = {
+                "X-Access-Key": self.access_key,
+                "X-Dtn-Signature": self._sign("")["X-Dtn-Signature"],
+            }
+            try:
+                resp = await self._client.get(
+                    "/api/v3/things.json",
+                    params={"page": page},
+                    headers=auth_headers,
+                )
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                raise RuntimeError(f"Network error fetching things: {exc}") from exc
 
-        data = resp.json()
-        # Datonis returns {"things": [...]} or a direct list
-        things_raw = data.get("things", data) if isinstance(data, dict) else data
-        things = []
-        for t in (things_raw if isinstance(things_raw, list) else []):
-            things.append({
-                "thing_key": t.get("thing_key") or t.get("uid") or t.get("key", ""),
-                "name": t.get("name", ""),
-                "metrics": [
-                    {"key": m.get("key", m) if isinstance(m, dict) else m,
-                     "display_name": m.get("display_name", "") if isinstance(m, dict) else ""}
-                    for m in t.get("metrics", t.get("properties", []))
-                ],
-            })
-        return things
+            if resp.status_code in (401, 403):
+                raise RuntimeError("Authentication failed — check API key and secret in Settings")
+            if resp.status_code != 200:
+                raise RuntimeError(f"Datonis returned HTTP {resp.status_code}: {resp.text[:400]}")
+
+            data = resp.json()
+            # Datonis format: {"total_count": 120, "page": 1, "things": [...]}
+            total_count = data.get("total_count", 0)
+            things_page = data.get("things", [])
+
+            for t in things_page:
+                metrics = [
+                    {"key": m.get("name", ""), "display_name": m.get("name", "")}
+                    for m in t.get("metrics", [])
+                    if isinstance(m, dict) and m.get("name")
+                ]
+                all_things.append({
+                    "thing_key": t.get("thing_key", ""),
+                    "name": t.get("name", ""),
+                    "metrics": metrics,
+                })
+
+            logger.info(f"Fetched page {page}: {len(things_page)} things (total so far: {len(all_things)}/{total_count})")
+
+            # Stop when we have all things or page returned nothing
+            if len(things_page) == 0 or len(all_things) >= total_count:
+                break
+
+            page += 1
+
+        logger.info(f"✅ Fetched {len(all_things)} total things from Datonis ({page} page(s))")
+        return all_things
 
     # ── publish events ────────────────────────────────────────
 

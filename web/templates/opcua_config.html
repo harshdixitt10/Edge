@@ -11,6 +11,26 @@
 <div class="alert alert-error">{{ error }}</div>
 {% endif %}
 
+<!-- Action Bar — fixed at top -->
+<div
+    style="display:flex; gap:12px; margin-bottom:20px; padding:16px 20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap; align-items:center; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm);">
+    <button type="button" class="btn btn-secondary" onclick="previewJson()">🔍 Preview JSON</button>
+    <button type="button" class="btn btn-secondary" onclick="downloadConfig()"
+        title="Download current configuration as JSON file">⬇️ Download JSON</button>
+    <label class="btn btn-secondary" style="cursor:pointer; margin:0;"
+        title="Upload a JSON config file to populate the form">
+        ⬆️ Upload JSON
+        <input type="file" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
+    </label>
+    <button type="button" class="btn btn-secondary" onclick="syncThings(this)" style="white-space:nowrap;">
+        🔁 Sync Things
+    </button>
+    <div style="flex:1;"></div>
+    <a href="/adapters" class="btn btn-secondary">Cancel</a>
+    <button type="button" class="btn btn-primary"
+        onclick="buildConfig(); document.getElementById('opcua-form').submit();">Save &amp; Start Adapter</button>
+</div>
+
 <form id="opcua-form" method="POST" action="/adapters/opcua/save">
     <input type="hidden" name="adapter_id" value="{{ adapter_id }}">
 
@@ -23,29 +43,29 @@
         <div class="grid-2">
             <div class="form-group">
                 <label class="form-label">Adapter Display Name</label>
-                <input type="text" name="adapter_name" class="form-input"
-                       value="{{ adapter_name or 'OPC-UA Adapter' }}" required>
+                <input type="text" name="adapter_name" class="form-input" value="{{ adapter_name or 'OPC-UA Adapter' }}"
+                    required>
             </div>
             <div class="form-group">
                 <label class="form-label">Thread Pool Size</label>
                 <input type="number" class="form-input" id="cfg-threadpool_size"
-                       value="{{ config.get('threadpool_size', 1) }}" min="1" max="16">
+                    value="{{ config.get('threadpool_size', 1) }}" min="1" max="16">
             </div>
             <div class="form-group">
                 <label class="form-label">Schedule Delay (ms)</label>
                 <input type="number" class="form-input" id="cfg-schedule_delay_mills"
-                       value="{{ config.get('schedule_delay_mills', 200) }}" min="50">
+                    value="{{ config.get('schedule_delay_mills', 200) }}" min="50">
             </div>
             <div class="form-group">
                 <label class="form-label">Test Timeout (secs)</label>
                 <input type="number" class="form-input" id="cfg-test_timeout_secs"
-                       value="{{ config.get('test_timeout_secs', 20) }}" min="1">
+                    value="{{ config.get('test_timeout_secs', 20) }}" min="1">
             </div>
             <div class="form-group">
                 <label class="form-label">Auto Concurrency</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="cfg-auto_concurrency"
-                           {{ 'checked' if config.get('auto_concurrency', True) else '' }}>
+                    <input type="checkbox" id="cfg-auto_concurrency" {{ 'checked' if config.get('auto_concurrency',
+                        True) else '' }}>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
@@ -58,9 +78,13 @@
         <span class="chevron open" id="chevron-section-b">&#9660;</span>
     </div>
     <div class="collapsible-body open" id="section-b">
+        <button type="button" class="btn btn-secondary" onclick="addThing()" style="margin-top:12px;">
+            Add Thing
+        </button>
 
         <!-- Sync Things Bar -->
-        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+        <!-- <div
+            style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:12px 16px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
             <span style="font-size:13px; color:var(--text-secondary); flex:1;">
                 Load registered Things from your Datonis cloud account (uses API key &amp; secret from Settings).
             </span>
@@ -68,14 +92,12 @@
                 ⟳ Sync Things
             </button>
             <span id="sync-things-status" style="font-size:12px; color:var(--text-secondary);"></span>
-        </div>
+        </div> -->
 
         <!-- Search Bar -->
         <div class="search-bar" style="margin-bottom:16px;">
-            <input type="text" id="thing-search" class="form-input"
-                   placeholder="Search by Thing Key or Thing Name..."
-                   oninput="filterThings(this.value)"
-                   style="padding-left:14px;">
+            <input type="text" id="thing-search" class="form-input" placeholder="Search by Thing Key or Thing Name..."
+                oninput="filterThings(this.value)" style="padding-left:14px;">
         </div>
 
         <!-- Thing Summary Table -->
@@ -95,6 +117,7 @@
                         <th>Total Tags</th>
                         <th>Metrics</th>
                         <th>Delete</th>
+                        <th>Enable/Disable</th>
                     </tr>
                 </thead>
                 <tbody id="thing-summary-body">
@@ -106,257 +129,305 @@
         <div id="things-container">
             {% set things = config.get('thing_configs', []) %}
             {% if things %}
-                {% for thing in things %}
-                <div class="thing-card card" style="margin-bottom:16px; background:var(--bg-input);" data-index="{{ loop.index0 }}">
-                    <div class="card-header">
-                        <span class="card-title">Thing: {{ thing.get('name', 'Unnamed') }}</span>
-                        <button type="button" class="btn btn-sm btn-danger" onclick="removeThing(this)">Remove</button>
+            {% for thing in things %}
+            <div class="thing-card card" style="margin-bottom:16px; background:var(--bg-input);"
+                data-index="{{ loop.index0 }}">
+                <div class="card-header">
+                    <span class="card-title">Thing: {{ thing.get('name', 'Unnamed') }}</span>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeThing(this)">Remove</button>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Thing Name</label>
+                        <input type="text" class="form-input thing-name" value="{{ thing.get('name', '') }}" required>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">Thing Key</label>
+                        <input type="text" class="form-input thing-key" value="{{ thing.get('thing_key', '') }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Scan Interval (ms)</label>
+                        <input type="number" class="form-input thing-scan-interval"
+                            value="{{ thing.get('scan_interval_ms', 2000) }}" min="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Send Interval (ms)</label>
+                        <input type="number" class="form-input thing-send-interval"
+                            value="{{ thing.get('send_interval_ms', 30000) }}" min="1000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Heartbeat Interval (ms)</label>
+                        <input type="number" class="form-input thing-heartbeat"
+                            value="{{ thing.get('heartbeat_interval_ms', 120000) }}" min="5000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Publish Mode</label>
+                        <select class="form-select thing-publish-mode">
+                            <option value="server" {{ 'selected' if thing.get('publish_mode')=='server' }}>Server (push
+                                on change)</option>
+                            <option value="poll" {{ 'selected' if thing.get('publish_mode')=='poll' }}>Poll (push every
+                                interval)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Config Mode</label>
+                        <select class="form-select thing-config-mode">
+                            <option value="read_write" {{ 'selected' if thing.get('config_mode')=='read_write' }}>Read &
+                                Write</option>
+                            <option value="read_only" {{ 'selected' if thing.get('config_mode')=='read_only' }}>Read
+                                Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Adapter Reset Interval</label>
+                        <input type="number" class="form-input thing-reset-interval"
+                            value="{{ thing.get('adapter_reset_interval', -1) }}">
+                    </div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Bi-Directional</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="thing-bidirectional" {{ 'checked' if
+                                thing.get('bi_directional', False) }}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Disabled</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="thing-disabled" {{ 'checked' if thing.get('disabled', False)
+                                }}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-textarea thing-description">{{ thing.get('description', '') }}</textarea>
+                </div>
+
+                <!-- OPC-UA Server Connection -->
+                {% set conn = thing.get('source_tags', [{}])[0].get('protocol_connection', {}) if
+                thing.get('source_tags') else {} %}
+                <div
+                    style="margin-top:20px; padding:20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color);">
+                    <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;">OPC-UA Server Connection</h3>
                     <div class="grid-2">
                         <div class="form-group">
-                            <label class="form-label">Thing Name</label>
-                            <input type="text" class="form-input thing-name" value="{{ thing.get('name', '') }}" required>
+                            <label class="form-label">Server URL</label>
+                            <input type="text" class="form-input conn-server-url"
+                                value="{{ conn.get('server_url', 'opc.tcp://localhost:4840') }}"
+                                placeholder="opc.tcp://host:port/path">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Thing Key</label>
-                            <input type="text" class="form-input thing-key" value="{{ thing.get('thing_key', '') }}">
+                            <label class="form-label">Connection ID</label>
+                            <input type="text" class="form-input conn-id"
+                                value="{{ conn.get('connection_id', 'connection_0') }}">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Scan Interval (ms)</label>
-                            <input type="number" class="form-input thing-scan-interval" value="{{ thing.get('scan_interval_ms', 2000) }}" min="100">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Send Interval (ms)</label>
-                            <input type="number" class="form-input thing-send-interval" value="{{ thing.get('send_interval_ms', 30000) }}" min="1000">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Heartbeat Interval (ms)</label>
-                            <input type="number" class="form-input thing-heartbeat" value="{{ thing.get('heartbeat_interval_ms', 120000) }}" min="5000">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Publish Mode</label>
-                            <select class="form-select thing-publish-mode">
-                                <option value="server" {{ 'selected' if thing.get('publish_mode') == 'server' }}>Server (push on change)</option>
-                                <option value="poll" {{ 'selected' if thing.get('publish_mode') == 'poll' }}>Poll (push every interval)</option>
+                            <label class="form-label">Security Policy</label>
+                            <select class="form-select conn-security">
+                                {% set policies = [
+                                ('http://opcfoundation.org/UA/SecurityPolicy#None', 'None'),
+                                ('http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15', 'Basic128Rsa15'),
+                                ('http://opcfoundation.org/UA/SecurityPolicy#Basic256', 'Basic256'),
+                                ('http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256', 'Basic256Sha256')
+                                ] %}
+                                {% for val, label in policies %}
+                                <option value="{{ val }}" {{ 'selected' if conn.get('security_policy_uri', '' )==val }}>
+                                    {{ label }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Config Mode</label>
-                            <select class="form-select thing-config-mode">
-                                <option value="read_write" {{ 'selected' if thing.get('config_mode') == 'read_write' }}>Read & Write</option>
-                                <option value="read_only" {{ 'selected' if thing.get('config_mode') == 'read_only' }}>Read Only</option>
+                            <label class="form-label">Auth Mechanism</label>
+                            <select class="form-select conn-auth-mechanism" onchange="toggleAuthFields(this)">
+                                <option value="anonymous" {{ 'selected' if conn.get('auth_mechanism')=='anonymous' }}>
+                                    Anonymous</option>
+                                <option value="username" {{ 'selected' if conn.get('auth_mechanism')=='username' }}>
+                                    Username & Password</option>
+                                <option value="certificate" {{ 'selected' if conn.get('auth_mechanism')=='certificate'
+                                    }}>Certificate</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="grid-2 auth-username-fields"
+                        style="{{ '' if conn.get('auth_mechanism') == 'username' else 'display:none;' }}">
                         <div class="form-group">
-                            <label class="form-label">Adapter Reset Interval</label>
-                            <input type="number" class="form-input thing-reset-interval" value="{{ thing.get('adapter_reset_interval', -1) }}">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-input conn-username"
+                                value="{{ conn.get('auth_username', '') }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input conn-password"
+                                value="{{ conn.get('auth_password', '') }}">
+                        </div>
+                    </div>
+                    <div class="auth-cert-fields"
+                        style="{{ '' if conn.get('auth_mechanism') == 'certificate' else 'display:none;' }}">
+                        <div class="form-group">
+                            <label class="form-label">Certificate Alias</label>
+                            <input type="text" class="form-input conn-cert-alias"
+                                value="{{ conn.get('auth_cert_alias', 'opcua') }}">
                         </div>
                     </div>
                     <div class="grid-2">
                         <div class="form-group">
-                            <label class="form-label">Bi-Directional</label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" class="thing-bidirectional"
-                                       {{ 'checked' if thing.get('bi_directional', False) }}>
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <label class="form-label">Application URI</label>
+                            <input type="text" class="form-input conn-app-uri"
+                                value="{{ conn.get('application_uri', 'urn:aliot:opcua:adapter') }}">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Disabled</label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" class="thing-disabled"
-                                       {{ 'checked' if thing.get('disabled', False) }}>
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <label class="form-label">Connection Timeout (ms)</label>
+                            <input type="number" class="form-input conn-timeout"
+                                value="{{ conn.get('timeout_millis', 10000) }}" min="1000">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-textarea thing-description">{{ thing.get('description', '') }}</textarea>
+                        <label class="form-label">Discover Endpoints</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="conn-discover" {{ 'checked' if conn.get('discover_endpoints',
+                                True) }}>
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
-
-                    <!-- OPC-UA Server Connection -->
-                    {% set conn = thing.get('source_tags', [{}])[0].get('protocol_connection', {}) if thing.get('source_tags') else {} %}
-                    <div style="margin-top:20px; padding:20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color);">
-                        <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;">OPC-UA Server Connection</h3>
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Server URL</label>
-                                <input type="text" class="form-input conn-server-url"
-                                       value="{{ conn.get('server_url', 'opc.tcp://localhost:4840') }}"
-                                       placeholder="opc.tcp://host:port/path">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Connection ID</label>
-                                <input type="text" class="form-input conn-id"
-                                       value="{{ conn.get('connection_id', 'connection_0') }}">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Security Policy</label>
-                                <select class="form-select conn-security">
-                                    {% set policies = [
-                                        ('http://opcfoundation.org/UA/SecurityPolicy#None', 'None'),
-                                        ('http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15', 'Basic128Rsa15'),
-                                        ('http://opcfoundation.org/UA/SecurityPolicy#Basic256', 'Basic256'),
-                                        ('http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256', 'Basic256Sha256')
-                                    ] %}
-                                    {% for val, label in policies %}
-                                    <option value="{{ val }}" {{ 'selected' if conn.get('security_policy_uri', '') == val }}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Auth Mechanism</label>
-                                <select class="form-select conn-auth-mechanism" onchange="toggleAuthFields(this)">
-                                    <option value="anonymous" {{ 'selected' if conn.get('auth_mechanism') == 'anonymous' }}>Anonymous</option>
-                                    <option value="username" {{ 'selected' if conn.get('auth_mechanism') == 'username' }}>Username & Password</option>
-                                    <option value="certificate" {{ 'selected' if conn.get('auth_mechanism') == 'certificate' }}>Certificate</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="grid-2 auth-username-fields" style="{{ '' if conn.get('auth_mechanism') == 'username' else 'display:none;' }}">
-                            <div class="form-group">
-                                <label class="form-label">Username</label>
-                                <input type="text" class="form-input conn-username" value="{{ conn.get('auth_username', '') }}">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Password</label>
-                                <input type="password" class="form-input conn-password" value="{{ conn.get('auth_password', '') }}">
-                            </div>
-                        </div>
-                        <div class="auth-cert-fields" style="{{ '' if conn.get('auth_mechanism') == 'certificate' else 'display:none;' }}">
-                            <div class="form-group">
-                                <label class="form-label">Certificate Alias</label>
-                                <input type="text" class="form-input conn-cert-alias" value="{{ conn.get('auth_cert_alias', 'opcua') }}">
-                            </div>
-                        </div>
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Application URI</label>
-                                <input type="text" class="form-input conn-app-uri" value="{{ conn.get('application_uri', 'urn:aliot:opcua:adapter') }}">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Connection Timeout (ms)</label>
-                                <input type="number" class="form-input conn-timeout" value="{{ conn.get('timeout_millis', 10000) }}" min="1000">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Discover Endpoints</label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" class="conn-discover" {{ 'checked' if conn.get('discover_endpoints', True) }}>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <button type="button" class="btn btn-secondary" onclick="testConnection(this)">
-                            Test Connection
-                        </button>
-                        <span class="test-result" style="margin-left:12px; font-size:13px;"></span>
-                    </div>
-
-                    <!-- Read Tags -->
-                    <div style="margin-top:20px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                            <h3 style="font-size:15px; font-weight:600;">Read Tags</h3>
-                            <button type="button" class="btn btn-sm btn-primary" onclick="addReadTag(this)">+ Add Tag</button>
-                        </div>
-                        <table class="data-table read-tags-table">
-                            <thead>
-                                <tr>
-                                    <th>Tag ID</th>
-                                    <th>Node ID</th>
-                                    <th>Namespace</th>
-                                    <th style="width:50px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% set read_tags = thing.get('source_tags', [{}])[0].get('read_tags', []) if thing.get('source_tags') else [] %}
-                                {% for tag in read_tags %}
-                                <tr>
-                                    <td><input type="text" class="form-input rtag-id" value="{{ tag.get('tag_id', '') }}" style="padding:6px 10px;"></td>
-                                    <td><input type="text" class="form-input rtag-node" value="{{ tag.get('node_id', '') }}" style="padding:6px 10px;"></td>
-                                    <td><input type="number" class="form-input rtag-ns" value="{{ tag.get('namespace', 2) }}" style="padding:6px 10px; width:80px;"></td>
-                                    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Derived Tags -->
-                    <div style="margin-top:20px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                            <h3 style="font-size:15px; font-weight:600;">Derived Tags</h3>
-                            <button type="button" class="btn btn-sm btn-primary" onclick="addDerivedTag(this)">+ Add Derived Tag</button>
-                        </div>
-                        <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
-                            Derived tags compute values from read tags using JavaScript-like expressions (Nashorn compatible).
-                            Example: <code style="color:var(--accent-green);">(tag1 + tag2) / 2</code>
-                        </p>
-                        <table class="data-table derived-tags-table">
-                            <thead>
-                                <tr>
-                                    <th>Tag ID</th>
-                                    <th>Expression (JS)</th>
-                                    <th>Source Tag IDs</th>
-                                    <th>Type</th>
-                                    <th style="width:50px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for dtag in thing.get('derived_tags', []) %}
-                                <tr>
-                                    <td><input type="text" class="form-input dtag-id" value="{{ dtag.get('tag_id', '') }}" style="padding:6px 10px;"></td>
-                                    <td><textarea class="form-textarea dtag-expr" style="font-family:monospace; min-height:36px; padding:6px 10px; font-size:12px;">{{ dtag.get('expression_js', '') }}</textarea></td>
-                                    <td><input type="text" class="form-input dtag-sources" value="{{ dtag.get('source_tag_ids', [])|join(', ') }}" style="padding:6px 10px;" placeholder="tag1, tag2"></td>
-                                    <td>
-                                        <select class="form-select dtag-type" style="padding:6px 10px;">
-                                            <option value="number" {{ 'selected' if dtag.get('type') == 'number' }}>number</option>
-                                            <option value="string" {{ 'selected' if dtag.get('type') == 'string' }}>string</option>
-                                            <option value="boolean" {{ 'selected' if dtag.get('type') == 'boolean' }}>boolean</option>
-                                        </select>
-                                    </td>
-                                    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- Metric Mappings -->
-                    <div style="margin-top:20px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                            <h3 style="font-size:15px; font-weight:600;">Metric Mappings</h3>
-                            <button type="button" class="btn btn-sm btn-primary" onclick="addMetricMapping(this)">+ Add Mapping</button>
-                        </div>
-                        <table class="data-table metric-mappings-table">
-                            <thead>
-                                <tr>
-                                    <th>Metric ID</th>
-                                    <th>Tag ID</th>
-                                    <th>Data Type</th>
-                                    <th style="width:50px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for mapping in thing.get('metric_mappings', []) %}
-                                <tr>
-                                    <td><input type="text" class="form-input mmap-metric" value="{{ mapping.get('metric_id', '') }}" style="padding:6px 10px;"></td>
-                                    <td><input type="text" class="form-input mmap-tag" value="{{ mapping.get('tag_id', '') }}" style="padding:6px 10px;"></td>
-                                    <td>
-                                        <select class="form-select mmap-type" style="padding:6px 10px;">
-                                            <option value="number" {{ 'selected' if mapping.get('type') == 'number' }}>number</option>
-                                            <option value="string" {{ 'selected' if mapping.get('type') == 'string' }}>string</option>
-                                            <option value="boolean" {{ 'selected' if mapping.get('type') == 'boolean' }}>boolean</option>
-                                        </select>
-                                    </td>
-                                    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="testConnection(this)">
+                        Test Connection
+                    </button>
+                    <span class="test-result" style="margin-left:12px; font-size:13px;"></span>
                 </div>
-                {% endfor %}
+
+                <!-- Read Tags -->
+                <div style="margin-top:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h3 style="font-size:15px; font-weight:600;">Read Tags</h3>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="addReadTag(this)">+ Add
+                            Tag</button>
+                    </div>
+                    <table class="data-table read-tags-table">
+                        <thead>
+                            <tr>
+                                <th>Tag ID</th>
+                                <th>Node ID</th>
+                                <th>Namespace</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set read_tags = thing.get('source_tags', [{}])[0].get('read_tags', []) if
+                            thing.get('source_tags') else [] %}
+                            {% for tag in read_tags %}
+                            <tr>
+                                <td><input type="text" class="form-input rtag-id" value="{{ tag.get('tag_id', '') }}"
+                                        style="padding:6px 10px;"></td>
+                                <td><input type="text" class="form-input rtag-node" value="{{ tag.get('node_id', '') }}"
+                                        style="padding:6px 10px;"></td>
+                                <td><input type="number" class="form-input rtag-ns"
+                                        value="{{ tag.get('namespace', 2) }}" style="padding:6px 10px; width:80px;">
+                                </td>
+                                <td><button type="button" class="btn btn-sm btn-danger"
+                                        onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Derived Tags -->
+                <div style="margin-top:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h3 style="font-size:15px; font-weight:600;">Derived Tags</h3>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="addDerivedTag(this)">+ Add Derived
+                            Tag</button>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+                        Derived tags compute values from read tags using JavaScript-like expressions (Nashorn
+                        compatible).
+                        Example: <code style="color:var(--accent-green);">(tag1 + tag2) / 2</code>
+                    </p>
+                    <table class="data-table derived-tags-table">
+                        <thead>
+                            <tr>
+                                <th>Tag ID</th>
+                                <th>Expression (JS)</th>
+                                <th>Source Tag IDs</th>
+                                <th>Type</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dtag in thing.get('derived_tags', []) %}
+                            <tr>
+                                <td><input type="text" class="form-input dtag-id" value="{{ dtag.get('tag_id', '') }}"
+                                        style="padding:6px 10px;"></td>
+                                <td><textarea class="form-textarea dtag-expr"
+                                        style="font-family:monospace; min-height:36px; padding:6px 10px; font-size:12px;">{{ dtag.get('expression_js', '') }}</textarea>
+                                </td>
+                                <td><input type="text" class="form-input dtag-sources"
+                                        value="{{ dtag.get('source_tag_ids', [])|join(', ') }}"
+                                        style="padding:6px 10px;" placeholder="tag1, tag2"></td>
+                                <td>
+                                    <select class="form-select dtag-type" style="padding:6px 10px;">
+                                        <option value="number" {{ 'selected' if dtag.get('type')=='number' }}>number
+                                        </option>
+                                        <option value="string" {{ 'selected' if dtag.get('type')=='string' }}>string
+                                        </option>
+                                        <option value="boolean" {{ 'selected' if dtag.get('type')=='boolean' }}>boolean
+                                        </option>
+                                    </select>
+                                </td>
+                                <td><button type="button" class="btn btn-sm btn-danger"
+                                        onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Metric Mappings -->
+                <div style="margin-top:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h3 style="font-size:15px; font-weight:600;">Metric Mappings</h3>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="addMetricMapping(this)">+ Add
+                            Mapping</button>
+                    </div>
+                    <table class="data-table metric-mappings-table">
+                        <thead>
+                            <tr>
+                                <th>Metric ID</th>
+                                <th>Tag ID</th>
+                                <th>Data Type</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for mapping in thing.get('metric_mappings', []) %}
+                            <tr>
+                                <td><input type="text" class="form-input mmap-metric"
+                                        value="{{ mapping.get('metric_id', '') }}" style="padding:6px 10px;"></td>
+                                <td><input type="text" class="form-input mmap-tag"
+                                        value="{{ mapping.get('tag_id', '') }}" style="padding:6px 10px;"></td>
+                                <td>
+                                    <select class="form-select mmap-type" style="padding:6px 10px;">
+                                        <option value="number" {{ 'selected' if mapping.get('type')=='number' }}>number
+                                        </option>
+                                        <option value="string" {{ 'selected' if mapping.get('type')=='string' }}>string
+                                        </option>
+                                        <option value="boolean" {{ 'selected' if mapping.get('type')=='boolean' }}>
+                                            boolean</option>
+                                    </select>
+                                </td>
+                                <td><button type="button" class="btn btn-sm btn-danger"
+                                        onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
             {% else %}
             <!-- Default empty thing template will be added by JS -->
             {% endif %}
@@ -366,15 +437,17 @@
         </button>
     </div>
 
-    <!-- Section G — Tag Suffixes (Advanced) -->
+    <!-- Section C — Tag Suffixes (Advanced) -->
     <div class="collapsible-header" onclick="toggleSection('section-g')">
-        <span class="card-title">Section G — Tag Suffixes (Advanced)</span>
+        <span class="card-title">Section C — Tag Suffixes (Advanced)</span>
         <span class="chevron" id="chevron-section-g">&#9660;</span>
     </div>
     <div class="collapsible-body" id="section-g">
         <div style="display:flex; gap:8px; margin-bottom:16px;">
-            <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffixPreset('round_2')">Round to 2 Decimals</button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffixPreset('null_guard')">Null Guard</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffixPreset('round_2')">Round to 2
+                Decimals</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffixPreset('null_guard')">Null
+                Guard</button>
         </div>
         <table class="data-table" id="suffixes-table">
             <thead>
@@ -387,30 +460,23 @@
             <tbody>
                 {% for suffix in config.get('tag_suffixes', []) %}
                 <tr>
-                    <td><input type="text" class="form-input suffix-id" value="{{ suffix.get('suffix_id', '') }}" style="padding:6px 10px;"></td>
-                    <td><textarea class="form-textarea suffix-expr" style="font-family:monospace; min-height:40px; padding:6px 10px; font-size:12px;">{{ suffix.get('expression_js', '') }}</textarea></td>
-                    <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">Del</button></td>
+                    <td><input type="text" class="form-input suffix-id" value="{{ suffix.get('suffix_id', '') }}"
+                            style="padding:6px 10px;"></td>
+                    <td><textarea class="form-textarea suffix-expr"
+                            style="font-family:monospace; min-height:40px; padding:6px 10px; font-size:12px;">{{ suffix.get('expression_js', '') }}</textarea>
+                    </td>
+                    <td><button type="button" class="btn btn-sm btn-danger"
+                            onclick="this.closest('tr').remove()">Delete</button></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffix()" style="margin-top:8px;">+ Add Suffix</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="addSuffix()" style="margin-top:8px;">+ Add
+            Suffix</button>
     </div>
 
     <!-- Hidden field for the built JSON -->
     <input type="hidden" name="config_json" id="config-json-field">
-
-    <!-- Action Buttons -->
-    <div style="display:flex; gap:12px; margin-top:24px; padding:20px; background:var(--bg-card); border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap;">
-        <button type="button" class="btn btn-secondary" onclick="previewJson()">Preview JSON</button>
-        <button type="button" class="btn btn-secondary" onclick="downloadConfig()" title="Download current configuration as JSON file">⬇ Download JSON</button>
-        <label class="btn btn-secondary" style="cursor:pointer; margin:0;" title="Upload a JSON config file to populate the form">
-            ⬆ Upload JSON
-            <input type="file" id="upload-json-input" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
-        </label>
-        <button type="submit" class="btn btn-primary" onclick="buildConfig()">Save & Start Adapter</button>
-        <a href="/adapters" class="btn btn-secondary">Cancel</a>
-    </div>
 </form>
 
 <!-- Sync Things Picker Modal -->
@@ -418,12 +484,14 @@
     <div class="modal" style="max-width:700px; width:95%;">
         <div class="modal-header">
             <h2 style="font-size:18px; font-weight:600;">Select Things to Import</h2>
-            <button class="modal-close" onclick="document.getElementById('sync-modal').classList.remove('show')">&#10005;</button>
+            <button class="modal-close"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">&#10005;</button>
         </div>
         <div id="sync-modal-body" style="max-height:400px; overflow:auto; margin:16px 0;"></div>
         <div style="display:flex; gap:8px; justify-content:flex-end;">
             <button id="sync-import-btn" class="btn btn-primary">Import Selected</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('sync-modal').classList.remove('show')">Cancel</button>
+            <button class="btn btn-secondary"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">Cancel</button>
         </div>
     </div>
 </div>
@@ -433,12 +501,14 @@
     <div class="modal">
         <div class="modal-header">
             <h2 style="font-size:18px; font-weight:600;">Configuration JSON</h2>
-            <button class="modal-close" onclick="document.getElementById('json-modal').classList.remove('show')">&#10005;</button>
+            <button class="modal-close"
+                onclick="document.getElementById('json-modal').classList.remove('show')">&#10005;</button>
         </div>
         <pre class="code-block" id="json-preview" style="max-height:400px; overflow:auto;"></pre>
         <div style="margin-top:16px; display:flex; gap:8px;">
             <button class="btn btn-sm btn-primary" onclick="copyJson()">Copy</button>
-            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('json-modal').classList.remove('show')">Close</button>
+            <button class="btn btn-sm btn-secondary"
+                onclick="document.getElementById('json-modal').classList.remove('show')">Close</button>
         </div>
     </div>
 </div>
@@ -504,14 +574,14 @@
 
             const row = document.createElement('tr');
             row.style.cursor = 'pointer';
-            row.onclick = function() {
+            row.onclick = function () {
                 card.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 card.style.borderColor = 'var(--accent-blue)';
                 setTimeout(() => { card.style.borderColor = ''; }, 2000);
             };
             row.innerHTML = `
                 <td style="font-weight:500;">${name}</td>
-                <td style="font-family:monospace; font-size:12px;">${key.length > 16 ? key.substring(0,16)+'...' : key}</td>
+                <td style="font-family:monospace; font-size:12px;">${key.length > 16 ? key.substring(0, 16) + '...' : key}</td>
                 <td>${scanInt}ms</td>
                 <td>${sendInt}ms</td>
                 <td>${alertInt}ms</td>
@@ -521,7 +591,23 @@
                 <td>${writeTags}</td>
                 <td><strong>${totalTags}</strong></td>
                 <td>${metrics}</td>
-                <td><button type="button" class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeThingByIndex(${i});">Del</button></td>
+                <td><button type="button" class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeThingByIndex(${i});">Delete</button></td>
+                <td onclick="event.stopPropagation();" style="text-align:center;">
+                    <div style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                        <label class="toggle-switch" title="${disabled ? 'Disabled — click to enable' : 'Enabled — click to disable'}" style="cursor:pointer;">
+                            <input type="checkbox" ${disabled ? '' : 'checked'}
+                                onchange="
+                                    const thingCard = document.querySelectorAll('.thing-card')[${i}];
+                                    const disabledCb = thingCard.querySelector('.thing-disabled');
+                                    disabledCb.checked = !this.checked;
+                                    this.closest('td').querySelector('span').textContent = this.checked ? 'Enabled' : 'Disabled';
+                                    this.closest('label').title = this.checked ? 'Enabled — click to disable' : 'Disabled — click to enable';
+                                ">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span style="font-size:12px; color:var(--text-secondary);">${disabled ? 'Disabled' : 'Enabled'}</span>
+                    </div>
+                </td>
             `;
             tbody.appendChild(row);
         });
@@ -683,7 +769,7 @@
             <td><input type="text" class="form-input rtag-id" style="padding:6px 10px;" placeholder="e.g. temperature"></td>
             <td><input type="text" class="form-input rtag-node" style="padding:6px 10px;" placeholder="e.g. 1009"></td>
             <td><input type="number" class="form-input rtag-ns" style="padding:6px 10px; width:80px;" value="2"></td>
-            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
         </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
         refreshSummary();
@@ -699,7 +785,7 @@
             <td><textarea class="form-textarea dtag-expr" style="font-family:monospace; min-height:36px; padding:6px 10px; font-size:12px;" placeholder="(tag1 + tag2) / 2"></textarea></td>
             <td><input type="text" class="form-input dtag-sources" style="padding:6px 10px;" placeholder="tag1, tag2"></td>
             <td><select class="form-select dtag-type" style="padding:6px 10px;"><option value="number">number</option><option value="string">string</option><option value="boolean">boolean</option></select></td>
-            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
         </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
         refreshSummary();
@@ -714,7 +800,7 @@
             <td><input type="text" class="form-input mmap-metric" style="padding:6px 10px;" placeholder="e.g. machine.status"></td>
             <td><input type="text" class="form-input mmap-tag" style="padding:6px 10px;" placeholder="e.g. machine_status"></td>
             <td><select class="form-select mmap-type" style="padding:6px 10px;"><option value="number">number</option><option value="string">string</option><option value="boolean">boolean</option></select></td>
-            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Del</button></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
         </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
         refreshSummary();
@@ -726,7 +812,7 @@
         const row = `<tr>
             <td><input type="text" class="form-input suffix-id" style="padding:6px 10px;"></td>
             <td><textarea class="form-textarea suffix-expr" style="font-family:monospace; min-height:40px; padding:6px 10px; font-size:12px;"></textarea></td>
-            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">Del</button></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">Delete</button></td>
         </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
     }
@@ -744,7 +830,7 @@
         const row = `<tr>
             <td><input type="text" class="form-input suffix-id" value="${id}" style="padding:6px 10px;"></td>
             <td><textarea class="form-textarea suffix-expr" style="font-family:monospace; min-height:40px; padding:6px 10px; font-size:12px;">${expr}</textarea></td>
-            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">Del</button></td>
+            <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">Delete</button></td>
         </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
     }
@@ -869,31 +955,40 @@
         const statusEl = document.getElementById('sync-things-status');
         btn.disabled = true;
         btn.textContent = '⏳ Syncing...';
-        statusEl.textContent = '';
+        statusEl.textContent = 'Connecting to Datonis cloud...';
         statusEl.style.color = 'var(--text-secondary)';
         try {
             const resp = await fetch('/api/adapters/sync-things');
+            if (!resp.ok) {
+                statusEl.textContent = `✗ Server error (HTTP ${resp.status})`;
+                statusEl.style.color = 'var(--accent-red)';
+                return;
+            }
             const result = await resp.json();
             if (!result.success) {
                 statusEl.textContent = '✗ ' + result.message;
                 statusEl.style.color = 'var(--accent-red)';
+                // Show full error in modal for easier diagnosis
+                AppModal.alert(result.message, { title: 'Sync Failed', icon: '❌' });
                 return;
             }
             const things = result.things || [];
             if (things.length === 0) {
-                statusEl.textContent = 'No things found in your account.';
+                statusEl.textContent = 'No things found in your cloud account.';
+                statusEl.style.color = 'var(--accent-amber)';
                 return;
             }
             // Show picker modal to let user select which things to add
             showThingPicker(things);
             statusEl.textContent = `✓ Loaded ${things.length} thing(s)`;
             statusEl.style.color = 'var(--accent-green)';
-        } catch(err) {
-            statusEl.textContent = '✗ Request failed: ' + err.message;
+        } catch (err) {
+            statusEl.textContent = '✗ Network error: ' + err.message;
             statusEl.style.color = 'var(--accent-red)';
+            AppModal.alert('Could not reach the sync endpoint.\n\n' + err.message, { title: 'Sync Failed', icon: '❌' });
         } finally {
             btn.disabled = false;
-            btn.textContent = '🔄 Sync Things';
+            btn.textContent = '⟳ Sync Things';
         }
     }
 
@@ -915,7 +1010,7 @@
                 <tbody>${rows}</tbody>
             </table>`;
         modal.classList.add('show');
-        document.getElementById('sync-import-btn').onclick = function() {
+        document.getElementById('sync-import-btn').onclick = function () {
             document.querySelectorAll('.sync-check:checked').forEach(cb => {
                 addThingFromSync(cb.dataset.key, cb.dataset.name);
             });
@@ -963,7 +1058,7 @@
         const file = input.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = function (e) {
             try {
                 const config = JSON.parse(e.target.result);
                 // Store config in hidden field and reload the page via form POST to re-render the form
@@ -974,7 +1069,7 @@
                 form.action = '/adapters/opcua/import';
                 form.submit();
                 form.action = originalAction;
-            } catch(err) {
+            } catch (err) {
                 AppModal.alert('Invalid JSON file: ' + err.message, { title: 'Upload Error', icon: '❌' });
             }
         };
