@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}CSV Adapter Configuration — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ 'Edit' if is_edit else 'New' }} CSV Adapter</h1>
+    <p class="page-subtitle">Configure directory monitoring, column-to-tag mapping, and metric assignments</p>
+</div>
+
+{% if error is defined and error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<!-- Action Bar -->
+<div style="display:flex; gap:12px; margin-bottom:20px; padding:16px 20px; background:var(--bg-card);
+     border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap;
+     align-items:center; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm);">
+    <button type="button" class="btn btn-secondary" onclick="previewJson()">Preview JSON</button>
+    <button type="button" class="btn btn-secondary" onclick="downloadConfig()">Download JSON</button>
+    <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
+        Upload JSON
+        <input type="file" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
+    </label>
+    <div style="flex:1;"></div>
+    <a href="/adapters" class="btn btn-secondary">Cancel</a>
+    <button type="button" class="btn btn-primary" onclick="saveAdapter()">Save &amp; Start Adapter</button>
+</div>
+
+<form id="csv-form" method="POST" action="/adapters/csv/save">
+    <input type="hidden" name="adapter_id" value="{{ adapter_id }}">
+    <input type="hidden" name="config_json" id="config_json_hidden">
+
+    <!-- Section A — Global Settings -->
+    <div class="collapsible-header" onclick="toggleSection('section-a')">
+        <span class="card-title">Section A — Global Settings</span>
+        <span class="chevron open" id="chevron-section-a">&#9660;</span>
+    </div>
+    <div class="collapsible-body open" id="section-a">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">Adapter Display Name</label>
+                <input type="text" name="adapter_name" class="form-input"
+                    value="{{ adapter_name or 'CSV Adapter' }}" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section B — Things -->
+    <div class="collapsible-header" onclick="toggleSection('section-b')">
+        <span class="card-title">Section B — Thing Configuration</span>
+        <span class="chevron open" id="chevron-section-b">&#9660;</span>
+    </div>
+    <div class="collapsible-body open" id="section-b">
+        <div id="things-container"></div>
+        <button type="button" class="btn btn-secondary" style="margin-top:12px;" onclick="addThing()">
+            + Add Thing
+        </button>
+    </div>
+</form>
+
+<script>
+// ──────────────────────────────────────────────────────────────────────────
+// Initial config injected by server
+// ──────────────────────────────────────────────────────────────────────────
+const INITIAL_CONFIG = {{ config | tojson }};
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section toggle
+// ──────────────────────────────────────────────────────────────────────────
+function toggleSection(id) {
+    document.getElementById(id).classList.toggle('open');
+    document.getElementById('chevron-' + id).classList.toggle('open');
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Thing card HTML — pure JS string (avoids <template> table-stripping quirks)
+// ──────────────────────────────────────────────────────────────────────────
+let thingCount = 0;
+
+function makeThingHTML(idx) {
+    return `
+<div class="card" style="margin-bottom:20px;" data-thing-index="${idx}">
+
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 style="font-size:15px;font-weight:600;color:var(--accent-blue);">Thing #${idx + 1}</h3>
+    <button type="button" class="btn btn-secondary" style="color:var(--accent-red);"
+      onclick="this.closest('[data-thing-index]').remove()">Remove Thing</button>
+  </div>
+
+  <!-- Identity -->
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="form-group">
+      <label class="form-label">Thing Key</label>
+      <input type="text" class="form-input thing-key" placeholder="auto-generated" value="">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Thing Name</label>
+      <input type="text" class="form-input thing-name" placeholder="e.g. Plant Sensors" value="">
+    </div>
+    <div class="form-group" style="grid-column:1/-1;">
+      <label class="form-label">Description</label>
+      <input type="text" class="form-input thing-description" placeholder="Optional description" value="">
+    </div>
+  </div>
+
+  <!-- File Source -->
+  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em;">File Source</div>
+    <div class="grid-2">
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">Directory Path</label>
+        <input type="text" class="form-input thing-directory" placeholder="/data/csv_exports" value="">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Absolute path to the directory containing CSV files</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">File Filter</label>
+        <input type="text" class="form-input thing-file-filter" placeholder="*.csv" value="*.csv">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Delimiter</label>
+        <input type="text" class="form-input thing-delimiter" placeholder="," value="," maxlength="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan Settings -->
+  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em;">Scan Settings</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Scan Interval (ms)</label>
+        <input type="number" class="form-input thing-scan-interval" value="5000" min="500">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Send Interval (ms)</label>
+        <input type="number" class="form-input thing-send-interval" value="30000" min="1000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Timestamp Column</label>
+        <input type="text" class="form-input thing-ts-column" placeholder="timestamp (optional)" value="">
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;gap:8px;">
+        <label class="form-label">Has Header Row</label>
+        <label class="toggle-switch">
+          <input type="checkbox" class="thing-has-header" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;gap:8px;">
+        <label class="form-label">Monitor File Updates</label>
+        <label class="toggle-switch">
+          <input type="checkbox" class="thing-monitor-updates" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;gap:8px;">
+        <label class="form-label">Disabled</label>
+        <label class="toggle-switch">
+          <input type="checkbox" class="thing-disabled">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tag Configs -->
+  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Tag Configuration</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;"
+        data-action="add-tag" onclick="addTagRow(this)">+ Add Tag</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color);">
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Column Name</th>
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Type</th>
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">File Path?</th>
+            <th style="padding:8px;"></th>
+          </tr>
+        </thead>
+        <tbody class="tag-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Metric Mappings -->
+  <div style="border-top:1px solid var(--border-color);padding-top:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Metric Mappings</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;"
+        data-action="add-metric" onclick="addMetricRow(this)">+ Add Mapping</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color);">
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Metric ID</th>
+            <th style="padding:8px;"></th>
+          </tr>
+        </thead>
+        <tbody class="metric-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Thing management
+// ──────────────────────────────────────────────────────────────────────────
+function addThing(thingData) {
+    const idx = thingCount++;
+    // Build node from JS string — no <template> element involved
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = makeThingHTML(idx);
+    const node = wrapper.firstElementChild;
+    document.getElementById('things-container').appendChild(node);
+    if (thingData) populateThing(node, thingData);
+    return node;
+}
+
+function populateThing(node, d) {
+    const q = (cls) => node.querySelector(cls);
+    q('.thing-key').value             = d.thing_key        || '';
+    q('.thing-name').value            = d.name             || '';
+    q('.thing-description').value     = d.description      || '';
+    q('.thing-directory').value       = d.directory_url    || '';
+    q('.thing-file-filter').value     = d.file_filter      || '*.csv';
+    q('.thing-delimiter').value       = d.delimiter        || ',';
+    q('.thing-scan-interval').value   = d.scan_interval_ms  || 5000;
+    q('.thing-send-interval').value   = d.send_interval_ms  || 30000;
+    q('.thing-ts-column').value       = d.timestamp_column || '';
+    q('.thing-has-header').checked    = d.has_header !== false;
+    q('.thing-monitor-updates').checked = d.monitor_file_updates !== false;
+    q('.thing-disabled').checked      = !!d.disabled;
+
+    // Use data-action attributes — no fragile DOM traversal
+    const addTagBtn    = node.querySelector('[data-action="add-tag"]');
+    const addMetricBtn = node.querySelector('[data-action="add-metric"]');
+    (d.tag_configs     || []).forEach(t => addTagRow(addTagBtn, t));
+    (d.metric_mappings || []).forEach(m => addMetricRow(addMetricBtn, m));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Tag row management
+// ──────────────────────────────────────────────────────────────────────────
+function addTagRow(btn, data) {
+    const card  = btn.closest('[data-thing-index]');
+    const tbody = card.querySelector('.tag-tbody');
+    const d     = data || {};
+    const tr    = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px;">
+        <input type="text" class="form-input tag-id" style="min-width:110px;"
+          placeholder="tag_id" value="${esc(d.tag_id)}">
+      </td>
+      <td style="padding:6px;">
+        <input type="text" class="form-input tag-col" style="min-width:120px;"
+          placeholder="column_name" value="${esc(d.column_name)}">
+      </td>
+      <td style="padding:6px;">
+        <select class="form-input tag-type" style="min-width:100px;">
+          <option value="number"  ${(d.value_type||'number')==='number' ?'selected':''}>number</option>
+          <option value="string"  ${d.value_type==='string'             ?'selected':''}>string</option>
+          <option value="boolean" ${d.value_type==='boolean'            ?'selected':''}>boolean</option>
+        </select>
+      </td>
+      <td style="padding:6px;text-align:center;">
+        <label class="toggle-switch" style="margin:0 auto;">
+          <input type="checkbox" class="tag-filepath" ${d.is_file_path?'checked':''}>
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td style="padding:6px;">
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;color:var(--accent-red);"
+          onclick="this.closest('tr').remove()">Remove</button>
+      </td>`;
+    tbody.appendChild(tr);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Metric mapping row management
+// ──────────────────────────────────────────────────────────────────────────
+function addMetricRow(btn, data) {
+    const card  = btn.closest('[data-thing-index]');
+    const tbody = card.querySelector('.metric-tbody');
+    const d     = data || {};
+    const tr    = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px;">
+        <input type="text" class="form-input metric-tag-id" style="min-width:120px;"
+          placeholder="tag_id" value="${esc(d.tag_id)}">
+      </td>
+      <td style="padding:6px;">
+        <input type="text" class="form-input metric-id" style="min-width:140px;"
+          placeholder="metric_id" value="${esc(d.metric_id)}">
+      </td>
+      <td style="padding:6px;">
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;color:var(--accent-red);"
+          onclick="this.closest('tr').remove()">Remove</button>
+      </td>`;
+    tbody.appendChild(tr);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Build config JSON from DOM → inject into hidden field
+// ──────────────────────────────────────────────────────────────────────────
+function buildConfig() {
+    const things = [];
+
+    document.querySelectorAll('#things-container [data-thing-index]').forEach(node => {
+        const q = (cls) => node.querySelector(cls);
+
+        // --- tag configs ---
+        const tagConfigs = [];
+        node.querySelectorAll('.tag-tbody tr').forEach(row => {
+            const tagId = row.querySelector('.tag-id').value.trim();
+            const col   = row.querySelector('.tag-col').value.trim();
+            if (!tagId && !col) return;
+            tagConfigs.push({
+                tag_id:       tagId,
+                column_name:  col,
+                value_type:   row.querySelector('.tag-type').value,
+                is_file_path: row.querySelector('.tag-filepath').checked,
+            });
+        });
+
+        // --- metric mappings ---
+        const metricMappings = [];
+        node.querySelectorAll('.metric-tbody tr').forEach(row => {
+            const tagId    = row.querySelector('.metric-tag-id').value.trim();
+            const metricId = row.querySelector('.metric-id').value.trim();
+            if (!tagId && !metricId) return;
+            metricMappings.push({ tag_id: tagId, metric_id: metricId });
+        });
+
+        const thingKey = q('.thing-key').value.trim();
+        things.push({
+            ...(thingKey ? { thing_key: thingKey } : {}),
+            name:                 q('.thing-name').value.trim(),
+            description:          q('.thing-description').value.trim(),
+            directory_url:        q('.thing-directory').value.trim(),
+            file_filter:          q('.thing-file-filter').value.trim() || '*.csv',
+            delimiter:            q('.thing-delimiter').value || ',',
+            has_header:           q('.thing-has-header').checked,
+            scan_interval_ms:     parseInt(q('.thing-scan-interval').value) || 5000,
+            send_interval_ms:     parseInt(q('.thing-send-interval').value) || 30000,
+            monitor_file_updates: q('.thing-monitor-updates').checked,
+            timestamp_column:     q('.thing-ts-column').value.trim(),
+            disabled:             q('.thing-disabled').checked,
+            tag_configs:          tagConfigs,
+            metric_mappings:      metricMappings,
+        });
+    });
+
+    const config = { adapter_type: 'csv', things };
+    document.getElementById('config_json_hidden').value = JSON.stringify(config);
+    return config;
+}
+
+function saveAdapter() {
+    try {
+        buildConfig();
+        document.getElementById('csv-form').submit();
+    } catch (err) {
+        alert('Error building config: ' + err.message);
+        console.error(err);
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Preview / download / upload helpers
+// ──────────────────────────────────────────────────────────────────────────
+function previewJson() {
+    try {
+        const cfg = buildConfig();
+        const w = window.open('', '_blank');
+        w.document.write('<pre style="font-family:monospace;padding:16px;background:#111;color:#eee;">' +
+            JSON.stringify(cfg, null, 2) + '</pre>');
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function downloadConfig() {
+    try {
+        const cfg = buildConfig();
+        const name = (document.querySelector('[name=adapter_name]').value.replace(/\s+/g, '_') || 'csv_adapter');
+        const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name + '_config.json';
+        a.click();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function uploadConfig(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            loadConfigIntoForm(JSON.parse(e.target.result));
+        } catch (err) {
+            alert('Invalid JSON: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+function loadConfigIntoForm(cfg) {
+    document.getElementById('things-container').innerHTML = '';
+    thingCount = 0;
+    (cfg.things || []).forEach(t => addThing(t));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Utility
+// ──────────────────────────────────────────────────────────────────────────
+function esc(s) {
+    return (s || '').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Bootstrap
+// ──────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    if (INITIAL_CONFIG && INITIAL_CONFIG.things && INITIAL_CONFIG.things.length > 0) {
+        loadConfigIntoForm(INITIAL_CONFIG);
+    } else {
+        addThing();
+    }
+});
+</script>
+{% endblock %}

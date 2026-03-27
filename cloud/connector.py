@@ -139,7 +139,9 @@ class CloudConnector:
                     continue
                 try:
                     config = json.loads(adapter_data["config_json"])
-                    for thing in config.get("thing_configs", []):
+                    # OPC-UA uses "thing_configs"; CSV adapter uses "things"
+                    thing_list = config.get("thing_configs") or config.get("things", [])
+                    for thing in thing_list:
                         thing_key = thing.get("thing_key", "")
                         send_interval = thing.get("send_interval_ms", 30000)
                         if thing_key:

@@ -7,6 +7,7 @@ connect(), disconnect(), and run().
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 
@@ -71,7 +72,6 @@ class BaseAdapter(ABC):
                     pass
                 
                 if self.running:
-                    import asyncio
                     await asyncio.sleep(5)
 
     async def stop(self) -> None:

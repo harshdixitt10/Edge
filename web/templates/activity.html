@@ -167,10 +167,15 @@
 </div>
 {% else %}
 <div class="card animate-in" style="text-align:center; padding:60px 20px; color:var(--text-muted);">
-    <div style="font-size:20px; margin-bottom:16px; color:var(--text-muted);">No Data</div>
+    <div style="margin-bottom:16px;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
     <h3 style="margin-bottom:8px; color:var(--text-primary);">No Activity Yet</h3>
     <p>Configure and enable adapters with things to see activity here.</p>
-    <a href="/adapters" class="btn btn-primary" style="margin-top:16px;">Configure Adapter</a>
+    <a href="/adapters" class="btn btn-primary" style="margin-top:16px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24"/></svg>
+        Configure Adapter
+    </a>
 </div>
 {% endif %}
 

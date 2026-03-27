@@ -7,7 +7,10 @@
         <h1 class="page-title">Adapters</h1>
         <p class="page-subtitle">Manage protocol adapters for data collection</p>
     </div>
-    <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
+    <a href="/adapters/new" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Adapter
+    </a>
 </div>
 
 {% block scripts %}
@@ -32,6 +35,11 @@ async function deleteAdapter(id, name) {
     <div class="card" style="position:relative;">
         <div class="card-header">
             <span class="card-title">
+                {% if adapter.type == 'csv' %}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                {% else %}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24"/></svg>
+                {% endif %}
                 {{ adapter.name }}
             </span>
             {% if adapter.status == 'connected' %}
@@ -54,11 +62,15 @@ async function deleteAdapter(id, name) {
         </div>
 
         <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:4px;">
-            <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+            <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit
+            </a>
 
-            
-
-            <button type="button" class="btn btn-sm btn-danger" onclick="deleteAdapter('{{ adapter.id }}', '{{ adapter.name }}')">Delete</button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="deleteAdapter('{{ adapter.id }}', '{{ adapter.name }}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Delete
+            </button>
         </div>
     </div>
     {% endfor %}
@@ -66,10 +78,16 @@ async function deleteAdapter(id, name) {
 {% else %}
 <div class="card animate-in">
     <div class="empty-state">
-        <div class="empty-state-icon" style="font-size:20px; color:var(--text-muted);">No Adapters</div>
+        <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24"/></svg>
+        </div>
         <p class="empty-state-text">No adapters configured yet.<br>Add your first adapter to start collecting data from your industrial equipment.</p>
-        <a href="/adapters/new" class="btn btn-primary">Add Adapter</a>
+        <a href="/adapters/new" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Adapter
+        </a>
     </div>
 </div>
 {% endif %}
 {% endblock %}
+

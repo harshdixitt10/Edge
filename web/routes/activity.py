@@ -34,7 +34,9 @@ async def activity_panel(request: Request):
         if a["enabled"]:
             try:
                 config = json.loads(a["config_json"])
-                for thing in config.get("thing_configs", []):
+                # OPC-UA uses "thing_configs"; CSV adapter uses "things"
+                thing_list = config.get("thing_configs") or config.get("things", [])
+                for thing in thing_list:
                     tk = thing.get("thing_key", "")
                     if tk:
                         # Collect metrics details
@@ -93,11 +95,14 @@ async def activity_panel(request: Request):
             logger.error(f"Error converting timestamp '{ts_val}' to local: {e}")
             return str(ts_val)
 
-    # Build combined list — merge adapter config info with activity log
+    # Build combined list — only show things from currently-enabled adapters
     combined = []
     seen_keys = set()
 
     for act in activities:
+        # Skip things that are no longer in any enabled adapter config
+        if act["thing_key"] not in adapter_map:
+            continue
         seen_keys.add(act["thing_key"])
         info = adapter_map.get(act["thing_key"], {})
         

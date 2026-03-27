@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from adapters.opcua_adapter import test_opcua_connection
-from core.models import OpcuaAdapterConfig
+from core.models import CsvAdapterConfig, OpcuaAdapterConfig
 from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
@@ -58,13 +58,15 @@ async def opcua_config_new(request: Request):
 
 @router.get("/adapters/{adapter_id}/edit", response_class=HTMLResponse)
 async def adapter_edit(request: Request, adapter_id: str):
-    """Edit an existing adapter configuration."""
+    """Edit an existing adapter configuration (routes to the correct type form)."""
     adapter = await store.get_adapter(adapter_id) if store else None
     if not adapter:
         return RedirectResponse("/adapters", status_code=302)
 
     config = json.loads(adapter["config_json"])
-    return templates.TemplateResponse("opcua_config.html", {
+    adapter_type = adapter.get("type", "opcua")
+    template_name = "csv_config.html" if adapter_type == "csv" else "opcua_config.html"
+    return templates.TemplateResponse(template_name, {
         "request": request,
         "adapter_id": adapter_id,
         "adapter_name": adapter["name"],
@@ -191,6 +193,63 @@ async def get_adapter_config(adapter_id: str):
         if adapter:
             return JSONResponse(json.loads(adapter["config_json"]))
     return JSONResponse({"error": "Adapter not found"}, status_code=404)
+
+
+@router.get("/adapters/csv/config", response_class=HTMLResponse)
+async def csv_config_new(request: Request):
+    """New CSV adapter configuration form."""
+    default_config = CsvAdapterConfig()
+    return templates.TemplateResponse("csv_config.html", {
+        "request": request,
+        "adapter_id": "",
+        "adapter_name": "",
+        "config": default_config.model_dump(),
+        "is_edit": False,
+    })
+
+
+@router.post("/adapters/csv/save")
+async def csv_save(request: Request):
+    """Validate and save CSV adapter configuration."""
+    form = await request.form()
+
+    adapter_id = form.get("adapter_id") or str(uuid.uuid4())
+    adapter_name = form.get("adapter_name", "CSV Adapter")
+
+    try:
+        config_json_str = form.get("config_json", "{}")
+        config_data = json.loads(config_json_str)
+
+        validated = CsvAdapterConfig(**config_data)
+        config_json = validated.model_dump_json()
+
+        await store.save_adapter(
+            adapter_id=adapter_id,
+            name=adapter_name,
+            adapter_type="csv",
+            config_json=config_json,
+            enabled=True,
+        )
+
+        if watchdog:
+            watchdog.restart_task("adapters")
+
+        await snapshots_routes.capture_snapshot(
+            trigger="adapter_saved",
+            name=f"Adapter saved: {adapter_name}",
+        )
+        return RedirectResponse("/adapters", status_code=302)
+
+    except Exception as e:
+        config_data = locals().get("config_data", {})
+        return templates.TemplateResponse("csv_config.html", {
+            "request": request,
+            "adapter_id": adapter_id,
+            "adapter_name": adapter_name,
+            "config": config_data,
+            "is_edit": bool(form.get("adapter_id")),
+            "error": str(e),
+        })
 
 
 @router.get("/api/adapters/sync-things")

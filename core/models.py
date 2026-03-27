@@ -135,6 +135,42 @@ class OpcuaAdapterConfig(BaseModel):
 
 
 # ─────────────────────────────────────────────
+# CSV Adapter Configuration Models
+# ─────────────────────────────────────────────
+
+class CsvTagConfig(BaseModel):
+    """Maps a CSV column to an edge-server tag."""
+    tag_id: str
+    column_name: str
+    is_file_path: bool = False          # If True, publish the CSV file path as value
+    value_type: str = "number"          # number | string | boolean
+
+
+class CsvThingConfig(BaseModel):
+    """Configuration for one logical device fed by CSV files."""
+    thing_key: str = Field(default_factory=lambda: uuid.uuid4().hex[:10])
+    name: str = ""
+    description: str = ""
+    directory_url: str = ""             # Absolute path to directory containing CSV files
+    file_filter: str = "*.csv"          # Glob pattern to match files
+    delimiter: str = ","                # Column delimiter (single character)
+    has_header: bool = True             # First row is a header row
+    scan_interval_ms: int = 5000        # How often to scan for new/changed data
+    send_interval_ms: int = 30000       # Cloud send throttle interval
+    monitor_file_updates: bool = True   # Re-read only when file mtime changes
+    timestamp_column: str = ""          # Optional column name for event timestamp
+    tag_configs: list[CsvTagConfig] = []
+    metric_mappings: list[MetricMapping] = []
+    disabled: bool = False
+
+
+class CsvAdapterConfig(BaseModel):
+    """Top-level configuration for the CSV adapter."""
+    adapter_type: str = "csv"
+    things: list[CsvThingConfig] = []
+
+
+# ─────────────────────────────────────────────
 # Application Configuration Models
 # ─────────────────────────────────────────────
 
