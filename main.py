@@ -77,32 +77,18 @@ async def run_web_server(app, host: str, port: int) -> None:
 
 async def run_adapters(store: LocalStore, bus: EventBus) -> None:
     """Load and run all enabled adapters from the database."""
+    from adapters.registry import get_adapter_class
     import json
-
-    # Lazy-load adapter classes independently so a missing dependency
-    # for one adapter type doesn't prevent the other from running.
-    ADAPTER_CLASSES = {}
-
-    try:
-        from adapters.opcua_adapter import OPCUAAdapter
-        ADAPTER_CLASSES["opcua"] = OPCUAAdapter
-    except ImportError as e:
-        logger.warning(f"OPC-UA adapter unavailable (missing dependency): {e}")
-
-    try:
-        from adapters.csv_adapter import CSVAdapter
-        ADAPTER_CLASSES["csv"] = CSVAdapter
-    except ImportError as e:
-        logger.warning(f"CSV adapter unavailable (missing dependency): {e}")
 
     async def _run_single(adapter_data):
         try:
             config = json.loads(adapter_data["config_json"])
             adapter_type = adapter_data.get("type", "opcua")
-            AdapterClass = ADAPTER_CLASSES.get(adapter_type)
+            AdapterClass = get_adapter_class(adapter_type)
             if AdapterClass is None:
                 logger.error(
-                    f"Unknown adapter type '{adapter_type}' for '{adapter_data['name']}'"
+                    f"Unknown adapter type '{adapter_type}' for '{adapter_data['name']}' "
+                    f"— plugin folder missing?"
                 )
                 await store.update_adapter_status(adapter_data["id"], "error")
                 return

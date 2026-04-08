@@ -1,18 +1,22 @@
 """
 Adapter management routes — CRUD for protocol adapters.
+
+Uses the plugin registry for dynamic adapter type support.
+Saves JSON backups on every config change.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from adapters.opcua_adapter import test_opcua_connection
-from core.models import CsvAdapterConfig, OpcuaAdapterConfig
+from adapters.registry import get_registry, get_config_model, get_available_adapters
 from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
@@ -24,10 +28,24 @@ watchdog = None
 config_manager = None
 http_connector = None
 
+# Backup directory — one level above edge_server/
+BACKUP_BASE = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _save_backup(adapter_type: str, adapter_name: str, config_json: str) -> None:
+    """Save a timestamped JSON backup of the adapter config."""
+    backup_dir = BACKUP_BASE / f"{adapter_type}_conf_backup"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = adapter_name.replace(" ", "_").replace("/", "_")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filepath = backup_dir / f"{safe_name}_{ts}.json"
+    filepath.write_text(json.dumps(json.loads(config_json), indent=2), encoding="utf-8")
+
+
+# ── Generic adapter list ──────────────────────────────────────
 
 @router.get("/adapters", response_class=HTMLResponse)
 async def adapter_list(request: Request):
-    """List all configured adapters."""
     adapters = await store.get_adapters() if store else []
     return templates.TemplateResponse("adapters.html", {
         "request": request,
@@ -37,17 +55,25 @@ async def adapter_list(request: Request):
 
 @router.get("/adapters/new", response_class=HTMLResponse)
 async def adapter_select_type(request: Request):
-    """Adapter type selection page."""
+    available = get_available_adapters()
     return templates.TemplateResponse("adapter_select.html", {
         "request": request,
+        "available_adapters": available,
     })
 
 
-@router.get("/adapters/opcua/config", response_class=HTMLResponse)
-async def opcua_config_new(request: Request):
-    """New OPC-UA adapter configuration form."""
-    default_config = OpcuaAdapterConfig()
-    return templates.TemplateResponse("opcua_config.html", {
+# ── Dynamic config form (works for any registered adapter type) ──
+
+@router.get("/adapters/{adapter_type}/config", response_class=HTMLResponse)
+async def adapter_config_new(request: Request, adapter_type: str):
+    registry = get_registry()
+    info = registry.get(adapter_type)
+    if not info:
+        return RedirectResponse("/adapters/new", status_code=302)
+
+    ConfigModel = info["config_model"]
+    default_config = ConfigModel()
+    return templates.TemplateResponse(info["template"], {
         "request": request,
         "adapter_id": "",
         "adapter_name": "",
@@ -58,14 +84,15 @@ async def opcua_config_new(request: Request):
 
 @router.get("/adapters/{adapter_id}/edit", response_class=HTMLResponse)
 async def adapter_edit(request: Request, adapter_id: str):
-    """Edit an existing adapter configuration (routes to the correct type form)."""
     adapter = await store.get_adapter(adapter_id) if store else None
     if not adapter:
         return RedirectResponse("/adapters", status_code=302)
 
     config = json.loads(adapter["config_json"])
     adapter_type = adapter.get("type", "opcua")
-    template_name = "csv_config.html" if adapter_type == "csv" else "opcua_config.html"
+    registry = get_registry()
+    info = registry.get(adapter_type)
+    template_name = info["template"] if info else "opcua_config.html"
     return templates.TemplateResponse(template_name, {
         "request": request,
         "adapter_id": adapter_id,
@@ -75,30 +102,37 @@ async def adapter_edit(request: Request, adapter_id: str):
     })
 
 
-@router.post("/adapters/opcua/save")
-async def opcua_save(request: Request):
-    """Validate and save OPC-UA adapter configuration."""
+@router.post("/adapters/{adapter_type}/save")
+async def adapter_save(request: Request, adapter_type: str):
+    """Validate and save any adapter type config."""
     form = await request.form()
-
     adapter_id = form.get("adapter_id") or str(uuid.uuid4())
-    adapter_name = form.get("adapter_name", "OPC-UA Adapter")
+    adapter_name = form.get("adapter_name", f"{adapter_type.upper()} Adapter")
 
-    # Build config from form data
+    registry = get_registry()
+    info = registry.get(adapter_type)
+    if not info:
+        return JSONResponse({"error": f"Unknown adapter type: {adapter_type}"}, status_code=400)
+
+    ConfigModel = info["config_model"]
+    template_name = info["template"]
+
     try:
         config_json_str = form.get("config_json", "{}")
         config_data = json.loads(config_json_str)
-
-        # Validate with Pydantic
-        validated = OpcuaAdapterConfig(**config_data)
+        validated = ConfigModel(**config_data)
         config_json = validated.model_dump_json()
 
         await store.save_adapter(
             adapter_id=adapter_id,
             name=adapter_name,
-            adapter_type="opcua",
+            adapter_type=adapter_type,
             config_json=config_json,
             enabled=True,
         )
+
+        # Save JSON backup
+        _save_backup(adapter_type, adapter_name, config_json)
 
         if watchdog:
             watchdog.restart_task("adapters")
@@ -110,19 +144,21 @@ async def opcua_save(request: Request):
         return RedirectResponse("/adapters", status_code=302)
 
     except Exception as e:
-        return templates.TemplateResponse("opcua_config.html", {
+        config_data_fallback = locals().get("config_data", {})
+        return templates.TemplateResponse(template_name, {
             "request": request,
             "adapter_id": adapter_id,
             "adapter_name": adapter_name,
-            "config": config_data if 'config_data' in dir() else {},
+            "config": config_data_fallback,
             "is_edit": bool(form.get("adapter_id")),
             "error": str(e),
         })
 
 
+# ── Delete / Toggle ───────────────────────────────────────────
+
 @router.post("/adapters/{adapter_id}/delete")
 async def adapter_delete(adapter_id: str):
-    """Delete an adapter."""
     if store:
         adapter = await store.get_adapter(adapter_id)
         name = adapter["name"] if adapter else adapter_id
@@ -135,7 +171,6 @@ async def adapter_delete(adapter_id: str):
 
 @router.post("/adapters/{adapter_id}/toggle")
 async def adapter_toggle(adapter_id: str):
-    """Toggle adapter enabled/disabled state."""
     if store:
         adapter = await store.get_adapter(adapter_id)
         if adapter:
@@ -147,26 +182,35 @@ async def adapter_toggle(adapter_id: str):
     return RedirectResponse("/adapters", status_code=302)
 
 
-@router.post("/adapters/opcua/import", response_class=HTMLResponse)
-async def opcua_import(request: Request):
-    """Re-render the config form pre-populated with an uploaded JSON config."""
+# ── Import / Test / Sync ──────────────────────────────────────
+
+@router.post("/adapters/{adapter_type}/import", response_class=HTMLResponse)
+async def adapter_import(request: Request, adapter_type: str):
+    """Re-render config form pre-populated with uploaded JSON."""
     form = await request.form()
     adapter_id = form.get("adapter_id", "")
     adapter_name = form.get("adapter_name", "")
     config_json_str = form.get("config_json", "{}")
+
+    registry = get_registry()
+    info = registry.get(adapter_type)
+    if not info:
+        return RedirectResponse("/adapters/new", status_code=302)
+
+    ConfigModel = info["config_model"]
     try:
         config_data = json.loads(config_json_str)
-        validated = OpcuaAdapterConfig(**config_data)
+        validated = ConfigModel(**config_data)
         config = validated.model_dump()
         error = None
     except Exception as e:
-        config_data = {}
         try:
             config = json.loads(config_json_str)
         except Exception:
             config = {}
         error = f"JSON imported but has validation warnings: {e}"
-    return templates.TemplateResponse("opcua_config.html", {
+
+    return templates.TemplateResponse(info["template"], {
         "request": request,
         "adapter_id": adapter_id,
         "adapter_name": adapter_name,
@@ -179,15 +223,19 @@ async def opcua_import(request: Request):
 
 @router.post("/api/adapters/test-connection")
 async def test_connection(request: Request):
-    """Test OPC-UA connection (called from config form)."""
+    """Test connection for adapters that support it."""
     data = await request.json()
-    result = await test_opcua_connection(data)
-    return JSONResponse(result)
+    adapter_type = data.pop("_adapter_type", "opcua")
+    registry = get_registry()
+    info = registry.get(adapter_type)
+    if info and "test_connection" in info:
+        result = await info["test_connection"](data)
+        return JSONResponse(result)
+    return JSONResponse({"success": False, "message": f"Test not supported for '{adapter_type}'"})
 
 
 @router.get("/api/adapters/{adapter_id}/config")
 async def get_adapter_config(adapter_id: str):
-    """Get adapter config as JSON (for Preview JSON button)."""
     if store:
         adapter = await store.get_adapter(adapter_id)
         if adapter:
@@ -195,73 +243,15 @@ async def get_adapter_config(adapter_id: str):
     return JSONResponse({"error": "Adapter not found"}, status_code=404)
 
 
-@router.get("/adapters/csv/config", response_class=HTMLResponse)
-async def csv_config_new(request: Request):
-    """New CSV adapter configuration form."""
-    default_config = CsvAdapterConfig()
-    return templates.TemplateResponse("csv_config.html", {
-        "request": request,
-        "adapter_id": "",
-        "adapter_name": "",
-        "config": default_config.model_dump(),
-        "is_edit": False,
-    })
-
-
-@router.post("/adapters/csv/save")
-async def csv_save(request: Request):
-    """Validate and save CSV adapter configuration."""
-    form = await request.form()
-
-    adapter_id = form.get("adapter_id") or str(uuid.uuid4())
-    adapter_name = form.get("adapter_name", "CSV Adapter")
-
-    try:
-        config_json_str = form.get("config_json", "{}")
-        config_data = json.loads(config_json_str)
-
-        validated = CsvAdapterConfig(**config_data)
-        config_json = validated.model_dump_json()
-
-        await store.save_adapter(
-            adapter_id=adapter_id,
-            name=adapter_name,
-            adapter_type="csv",
-            config_json=config_json,
-            enabled=True,
-        )
-
-        if watchdog:
-            watchdog.restart_task("adapters")
-
-        await snapshots_routes.capture_snapshot(
-            trigger="adapter_saved",
-            name=f"Adapter saved: {adapter_name}",
-        )
-        return RedirectResponse("/adapters", status_code=302)
-
-    except Exception as e:
-        config_data = locals().get("config_data", {})
-        return templates.TemplateResponse("csv_config.html", {
-            "request": request,
-            "adapter_id": adapter_id,
-            "adapter_name": adapter_name,
-            "config": config_data,
-            "is_edit": bool(form.get("adapter_id")),
-            "error": str(e),
-        })
-
-
 @router.get("/api/adapters/sync-things")
 async def sync_things_from_cloud():
-    """Fetch registered Things from Datonis cloud using current API credentials."""
+    """Fetch registered Things from Datonis cloud."""
     import logging as _log
     _log.getLogger(__name__).info("sync-things requested")
-
     if not http_connector:
-        return JSONResponse({"success": False, "message": "Cloud connector not available — check server is running"})
+        return JSONResponse({"success": False, "message": "Cloud connector not available"})
     if not http_connector._client:
-        return JSONResponse({"success": False, "message": "HTTP client not started — cloud not connected yet"})
+        return JSONResponse({"success": False, "message": "HTTP client not started"})
     try:
         things = await http_connector.fetch_things()
         return JSONResponse({"success": True, "things": things, "count": len(things)})

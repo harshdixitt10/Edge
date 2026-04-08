@@ -25,7 +25,7 @@ cloud:
   - 504
   ssl_verify: true
 database:
-  path: data/edge_server.db
+  path: ../data/edge_server.db
   retention_days: 7
 logging:
   level: INFO

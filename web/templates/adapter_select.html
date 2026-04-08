@@ -8,31 +8,16 @@
 </div>
 
 <div class="grid-3 animate-in">
-    <!-- OPC-UA -->
-    <a href="/adapters/opcua/config" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
-        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:var(--accent-blue);">OPC-UA</div>
-        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px; color:var(--text-primary);">OPC-UA</h3>
-        <p style="font-size:13px; color:var(--text-secondary);">
-            Connect to OPC-UA servers for PLC, SCADA, and DCS data collection.
-            Supports subscriptions, security policies, and namespace browsing.
-        </p>
+    {% for adapter in available_adapters %}
+    <a href="/adapters/{{ adapter.type }}/config" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
+        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:{{ adapter.icon_color }};">{{ adapter.name }}</div>
+        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px; color:var(--text-primary);">{{ adapter.name }}</h3>
+        <p style="font-size:13px; color:var(--text-secondary);">{{ adapter.description }}</p>
         <div style="margin-top:16px;">
             <span class="badge badge-green">Available</span>
         </div>
     </a>
-
-    <!-- CSV -->
-    <a href="/adapters/csv/config" class="card" style="text-decoration:none; text-align:center; cursor:pointer;">
-        <div style="font-size:20px; margin-bottom:16px; font-weight:700; color:var(--accent-green);">CSV</div>
-        <h3 style="font-size:18px; font-weight:600; margin-bottom:8px; color:var(--text-primary);">CSV File Reader</h3>
-        <p style="font-size:13px; color:var(--text-secondary);">
-            Read data from CSV files in a directory. Supports column-to-tag mapping,
-            file change monitoring, and configurable scan intervals.
-        </p>
-        <div style="margin-top:16px;">
-            <span class="badge badge-green">Available</span>
-        </div>
-    </a>
+    {% endfor %}
 
     <!-- Modbus (Coming Soon) -->
     <div class="card" style="text-align:center; opacity:0.5; cursor:not-allowed;">
@@ -60,6 +45,6 @@
 </div>
 
 <div style="margin-top:24px;">
-    <a href="/adapters" class="btn btn-secondary">← Back to Adapters</a>
+    <a href="/adapters" class="btn btn-secondary">Back to Adapters</a>
 </div>
 {% endblock %}
