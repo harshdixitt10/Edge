@@ -1,5 +1,5 @@
 """OPC-UA adapter plugin."""
-
+# This Opcua adapter can be used as a plugin means if you want to use this adapter, you can just add the folder of the adapter and it will be detected automatically
 
 def get_adapter_info():
     from adapters.opcua.adapter import OPCUAAdapter, test_opcua_connection
