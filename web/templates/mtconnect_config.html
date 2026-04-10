@@ -351,12 +351,16 @@ function saveAdapter() {
 function previewJson() {
     try {
         const cfg = buildConfig();
-        const w = window.open('', '_blank');
-        w.document.write('<pre style="font-family:monospace;padding:16px;background:#111;color:#eee;">' +
-            JSON.stringify(cfg, null, 2) + '</pre>');
+        document.getElementById('json-preview').textContent = JSON.stringify(cfg, null, 2);
+        document.getElementById('json-modal').classList.add('show');
     } catch (err) {
         alert('Error: ' + err.message);
     }
+}
+
+function copyJson() {
+    const text = document.getElementById('json-preview').textContent;
+    navigator.clipboard.writeText(text).then(() => alert('JSON copied to clipboard.'));
 }
 
 function downloadConfig() {
@@ -411,4 +415,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 </script>
+
+<!-- JSON Preview Modal -->
+<div class="modal-overlay" id="json-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 style="font-size:18px; font-weight:600;">Configuration JSON</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('json-modal').classList.remove('show')">&#10005;</button>
+        </div>
+        <pre class="code-block" id="json-preview" style="max-height:400px; overflow:auto;"></pre>
+        <div style="margin-top:16px; display:flex; gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="copyJson()">Copy</button>
+            <button class="btn btn-sm btn-secondary"
+                onclick="document.getElementById('json-modal').classList.remove('show')">Close</button>
+        </div>
+    </div>
+</div>
 {% endblock %}

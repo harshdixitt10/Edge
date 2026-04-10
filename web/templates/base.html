@@ -19,12 +19,12 @@
             --bg-card-hover: #1e2a3a;
             --bg-input: #0d1321;
             --border-color: #2a3548;
-            --border-focus: #3b82f6;
+            --border-focus: #1B9EDB;
             --text-primary: #e8ecf4;
             --text-secondary: #8b95a8;
             --text-muted: #5a6577;
-            --accent-blue: #3b82f6;
-            --accent-blue-hover: #2563eb;
+            --accent-blue: #1B9EDB;
+            --accent-blue-hover: #1889C0;
             --accent-green: #10b981;
             --accent-green-glow: rgba(16, 185, 129, 0.15);
             --accent-red: #ef4444;
@@ -32,12 +32,12 @@
             --accent-amber: #f59e0b;
             --accent-amber-glow: rgba(245, 158, 11, 0.15);
             --accent-purple: #8b5cf6;
-            --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            --gradient-card: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(139, 92, 246, 0.05));
+            --gradient-primary: #1B9EDB;
+            --gradient-card: linear-gradient(135deg, rgba(27, 158, 219, 0.05), rgba(27, 158, 219, 0.02));
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
             --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
             --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
-            --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+            --shadow-glow: 0 0 20px rgba(27, 158, 219, 0.1);
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
@@ -53,12 +53,12 @@
             --bg-card-hover: #f0f4f8;
             --bg-input: #f5f7fa;
             --border-color: #d1d9e6;
-            --border-focus: #3b82f6;
+            --border-focus: #1B9EDB;
             --text-primary: #1a202c;
             --text-secondary: #4a5568;
             --text-muted: #a0aec0;
-            --accent-blue: #3b82f6;
-            --accent-blue-hover: #2563eb;
+            --accent-blue: #1B9EDB;
+            --accent-blue-hover: #1889C0;
             --accent-green: #059669;
             --accent-green-glow: rgba(5, 150, 105, 0.1);
             --accent-red: #dc2626;
@@ -66,12 +66,12 @@
             --accent-amber: #d97706;
             --accent-amber-glow: rgba(217, 119, 6, 0.08);
             --accent-purple: #7c3aed;
-            --gradient-primary: linear-gradient(135deg, #3b82f6, #7c3aed);
-            --gradient-card: linear-gradient(135deg, rgba(59, 130, 246, 0.03), rgba(124, 58, 237, 0.03));
+            --gradient-primary: #1B9EDB;
+            --gradient-card: linear-gradient(135deg, rgba(27, 158, 219, 0.03), rgba(27, 158, 219, 0.01));
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
             --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
             --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
-            --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.06);
+            --shadow-glow: 0 0 20px rgba(27, 158, 219, 0.06);
         }
 
         body {
@@ -110,7 +110,7 @@
         /* Hamburger toggle button */
         .sidebar-toggle {
             position: fixed;
-            top: 16px;
+            top: 8px; /* Changed from 16px to center vertically in the 52px topnav */
             left: 272px;
             z-index: 101;
             width: 36px;
@@ -129,7 +129,7 @@
         .sidebar-toggle:hover {
             color: var(--accent-blue);
             border-color: var(--accent-blue);
-            background: rgba(59, 130, 246, 0.08);
+            background: rgba(27, 158, 219, 0.08);
         }
 
         .sidebar.collapsed ~ .sidebar-toggle,
@@ -195,12 +195,12 @@
         }
 
         .nav-item:hover {
-            background: rgba(59, 130, 246, 0.08);
+            background: rgba(27, 158, 219, 0.08);
             color: var(--text-primary);
         }
 
         .nav-item.active {
-            background: rgba(59, 130, 246, 0.12);
+            background: rgba(27, 158, 219, 0.12);
             color: var(--accent-blue);
         }
 
@@ -317,10 +317,6 @@
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .sidebar.collapsed ~ .main-content {
-            margin-left: 0;
-        }
-
         .page-header {
             margin-bottom: 28px;
         }
@@ -347,7 +343,7 @@
         }
 
         .card:hover {
-            border-color: rgba(59, 130, 246, 0.2);
+            border-color: rgba(27, 158, 219, 0.2);
             box-shadow: var(--shadow-glow);
         }
 
@@ -401,9 +397,9 @@
         }
 
         .badge-blue {
-            background: rgba(59, 130, 246, 0.1);
+            background: rgba(27, 158, 219, 0.1);
             color: var(--accent-blue);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            border: 1px solid rgba(27, 158, 219, 0.3);
         }
 
         .status-dot {
@@ -436,11 +432,11 @@
         .btn-primary {
             background: var(--gradient-primary);
             color: white;
-            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 2px 8px rgba(27, 158, 219, 0.3);
         }
 
         .btn-primary:hover {
-            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 16px rgba(27, 158, 219, 0.4);
             transform: translateY(-1px);
         }
 
@@ -498,7 +494,7 @@
         .form-input:focus, .form-select:focus, .form-textarea:focus {
             outline: none;
             border-color: var(--border-focus);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 0 3px rgba(27, 158, 219, 0.1);
         }
 
         .form-textarea { min-height: 80px; resize: vertical; }
@@ -562,7 +558,7 @@
         .data-table th {
             text-align: left;
             padding: 12px 16px;
-            background: rgba(59, 130, 246, 0.05);
+            background: rgba(27, 158, 219, 0.05);
             color: var(--text-secondary);
             font-weight: 500;
             font-size: 12px;
@@ -578,7 +574,7 @@
         }
 
         .data-table tbody tr:hover {
-            background: rgba(59, 130, 246, 0.03);
+            background: rgba(27, 158, 219, 0.03);
         }
 
         /* ── Metric Cards ──────────────────────────── */
@@ -665,7 +661,7 @@
         .search-bar input:focus {
             outline: none;
             border-color: var(--border-focus);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 0 3px rgba(27, 158, 219, 0.1);
         }
 
         .search-bar::before {
@@ -680,19 +676,67 @@
             opacity: 0;
         }
 
+        /* ── Top Nav (shown when sidebar collapsed) ── */
+        .topnav {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 52px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 99;
+            align-items: center;
+            padding: 0 16px 0 56px;
+            gap: 4px;
+        }
+
+        .topnav .topnav-link {
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .topnav .topnav-link:hover {
+            background: rgba(27, 158, 219, 0.08);
+            color: var(--text-primary);
+        }
+
+        .topnav .topnav-link.active {
+            background: rgba(27, 158, 219, 0.12);
+            color: var(--accent-blue);
+        }
+
+        .sidebar.collapsed ~ .topnav {
+            display: flex;
+        }
+
+        .sidebar.collapsed ~ .main-content {
+            margin-left: 0;
+            padding-top: 72px;
+        }
+
         /* ── Responsive ───────────────────────────── */
         @media (max-width: 1024px) {
             .grid-4 { grid-template-columns: repeat(2, 1fr); }
             .sidebar { transform: translateX(-260px); }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; }
+            .main-content { margin-left: 0; padding-top: 72px; }
+            .topnav { display: flex; }
             .sidebar-toggle { left: 12px; }
             .sidebar.open ~ .sidebar-toggle { left: 272px; }
+            .sidebar.open ~ .topnav { display: none; }
         }
 
         @media (max-width: 640px) {
             .grid-2, .grid-3 { grid-template-columns: 1fr; }
-            .main-content { padding: 16px; padding-top: 64px; }
+            .main-content { padding: 16px; padding-top: 68px; }
+            .topnav { padding-left: 48px; gap: 2px; }
+            .topnav .topnav-link { padding: 6px 10px; font-size: 12px; }
         }
 
         /* ── Collapsible Section ─────────────────── */
@@ -711,7 +755,7 @@
         }
 
         .collapsible-header:hover {
-            border-color: rgba(59, 130, 246, 0.3);
+            border-color: rgba(27, 158, 219, 0.3);
         }
 
         .collapsible-body {
@@ -987,12 +1031,21 @@
 
         <!-- Sidebar Toggle Button (Hamburger) -->
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="3" y1="6" x2="21" y2="6"/>
                 <line x1="3" y1="12" x2="21" y2="12"/>
                 <line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
         </button>
+
+        <!-- Top Nav (visible when sidebar collapsed) -->
+        <nav class="topnav">
+            <a href="/dashboard" class="topnav-link {% if request.url.path == '/dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="/adapters" class="topnav-link {% if '/adapters' in request.url.path %}active{% endif %}">Adapters</a>
+            <a href="/activity" class="topnav-link {% if request.url.path == '/activity' %}active{% endif %}">Activity</a>
+            <a href="/settings" class="topnav-link {% if request.url.path == '/settings' %}active{% endif %}">Settings</a>
+            <a href="/snapshots" class="topnav-link {% if request.url.path == '/snapshots' %}active{% endif %}">Snapshots</a>
+        </nav>
 
         <!-- Main Content -->
         <main class="main-content">

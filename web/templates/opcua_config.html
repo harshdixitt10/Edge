@@ -1042,7 +1042,7 @@
     function downloadConfig() {
         const config = buildConfig();
         if (!config) return;
-        const adapterName = document.getElementById('adapter-name').value || 'adapter-config';
+        const adapterName = document.querySelector('[name=adapter_name]').value || 'adapter-config';
         const filename = adapterName.toLowerCase().replace(/\s+/g, '-') + '.json';
         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
