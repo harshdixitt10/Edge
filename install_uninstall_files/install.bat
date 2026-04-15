@@ -1,0 +1,123 @@
+@echo off
+REM ──────────────────────────────────────────────────────────────
+REM  Datonis Edge Server — Install & Run as Windows Service
+REM  Usage:  Run as Administrator — right-click > Run as administrator
+REM ──────────────────────────────────────────────────────────────
+setlocal enabledelayedexpansion
+
+set SERVICE_NAME=DatonisEdgeServer
+set DISPLAY_NAME=Datonis Edge Server
+set SCRIPT_DIR=%~dp0
+set EDGE_DIR=%SCRIPT_DIR%
+set VENV_DIR=%EDGE_DIR%venv
+set PARENT_DIR=%EDGE_DIR%..
+
+echo.
+echo ════════════════════════════════════════════════════════
+echo    Datonis Edge Server — Installer (Windows)
+echo ════════════════════════════════════════════════════════
+echo.
+
+REM ── Check admin privileges ──
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] This script must be run as Administrator.
+    echo         Right-click and select "Run as administrator".
+    pause
+    exit /b 1
+)
+
+REM ── Find Python ──
+where python >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Python not found. Install Python 3.8+ from https://www.python.org
+    pause
+    exit /b 1
+)
+for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
+echo [INFO]  Python found: %PYVER%
+echo [INFO]  Edge server directory: %EDGE_DIR%
+echo.
+
+REM ── Step 1: Stop existing service if running ──
+sc query %SERVICE_NAME% >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [WARN]  Existing service found — stopping and removing...
+    net stop %SERVICE_NAME% >nul 2>&1
+    sc delete %SERVICE_NAME% >nul 2>&1
+    timeout /t 2 /nobreak >nul
+    echo [OK]    Old service removed
+)
+
+REM ── Step 2: Fresh configuration ──
+echo [INFO]  Ensuring fresh configuration...
+if exist "%EDGE_DIR%config.template.yaml" (
+    copy /Y "%EDGE_DIR%config.template.yaml" "%EDGE_DIR%config.yaml" >nul
+    echo [OK]    config.yaml reset to template (fresh)
+) else (
+    echo [WARN]  config.template.yaml not found — keeping existing config.yaml
+)
+
+REM Remove old database
+if exist "%PARENT_DIR%\data\edge_server.db" (
+    del /F /Q "%PARENT_DIR%\data\edge_server.db"
+    echo [OK]    Old database removed (fresh start)
+)
+
+REM ── Step 3: Create virtual environment ──
+echo [INFO]  Setting up Python virtual environment...
+python -m venv "%VENV_DIR%"
+echo [OK]    Virtual environment created
+
+REM ── Step 4: Install dependencies ──
+echo [INFO]  Installing dependencies...
+"%VENV_DIR%\Scripts\pip.exe" install --upgrade pip --quiet
+"%VENV_DIR%\Scripts\pip.exe" install -r "%EDGE_DIR%requirements.txt" --quiet
+echo [OK]    Dependencies installed
+
+REM ── Step 5: Create required directories ──
+if not exist "%PARENT_DIR%\logs" mkdir "%PARENT_DIR%\logs"
+if not exist "%PARENT_DIR%\data" mkdir "%PARENT_DIR%\data"
+if not exist "%PARENT_DIR%\Snapshot Backup" mkdir "%PARENT_DIR%\Snapshot Backup"
+if not exist "%PARENT_DIR%\Configuration Backup\opcua_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\opcua_conf_backup"
+if not exist "%PARENT_DIR%\Configuration Backup\csv_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\csv_conf_backup"
+if not exist "%PARENT_DIR%\Configuration Backup\mtconnect_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\mtconnect_conf_backup"
+echo [OK]    Directories created
+
+REM ── Step 6: Create a wrapper script for the service ──
+(
+echo @echo off
+echo cd /d "%EDGE_DIR%"
+echo "%VENV_DIR%\Scripts\python.exe" main.py
+) > "%EDGE_DIR%run_service.bat"
+
+REM ── Step 7: Install as Windows Service using sc + NSSM or direct method ──
+REM We use a scheduled task as a lightweight service alternative since
+REM sc.exe requires a proper Windows Service executable.
+echo [INFO]  Creating Windows scheduled task (runs at startup)...
+
+schtasks /create /tn "%SERVICE_NAME%" /tr "\"%EDGE_DIR%run_service.bat\"" /sc onstart /ru SYSTEM /rl HIGHEST /f >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK]    Scheduled task created: %SERVICE_NAME%
+) else (
+    echo [WARN]  Could not create scheduled task. You may need to start manually.
+)
+
+REM ── Step 8: Start now ──
+echo [INFO]  Starting Edge Server...
+start "Datonis Edge Server" /min "%EDGE_DIR%run_service.bat"
+echo [OK]    Server started in background
+
+echo.
+echo ════════════════════════════════════════════════════════
+echo    Installation complete!
+echo.
+echo    Service name:  %SERVICE_NAME%
+echo    Web UI:        http://localhost:8090
+echo    Login:         admin / changeme
+echo.
+echo    To stop:   taskkill /FI "WINDOWTITLE eq Datonis Edge Server"
+echo    To remove: Run uninstall.bat as Administrator
+echo ════════════════════════════════════════════════════════
+echo.
+pause
