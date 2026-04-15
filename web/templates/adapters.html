@@ -26,6 +26,24 @@ async function deleteAdapter(id, name) {
     document.body.appendChild(form);
     form.submit();
 }
+
+async function toggleAdapter(id, name, enabled) {
+    const action = enabled ? 'Disable' : 'Enable';
+    const msg = enabled
+        ? `Disable adapter "${name}"?\n\nIt will stop collecting and sending data until re-enabled.`
+        : `Enable adapter "${name}"?\n\nIt will start collecting and sending data.`;
+    const ok = await AppModal.confirm(msg, {
+        title: action + ' Adapter',
+        confirmText: action,
+        danger: enabled
+    });
+    if (!ok) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/adapters/${id}/toggle`;
+    document.body.appendChild(form);
+    form.submit();
+}
 </script>
 {% endblock %}
 
@@ -44,7 +62,9 @@ async function deleteAdapter(id, name) {
                 {% endif %}
                 {{ adapter.name }}
             </span>
-            {% if adapter.status == 'connected' %}
+            {% if not adapter.enabled %}
+            <span class="badge" style="background:rgba(139,149,168,0.15); color:var(--text-secondary); border:1px solid var(--text-muted);"><span class="status-dot" style="background:var(--text-muted);"></span> Disabled</span>
+            {% elif adapter.status == 'connected' %}
             <span class="badge badge-green"><span class="status-dot green"></span> Running</span>
             {% elif adapter.status == 'connecting' %}
             <span class="badge badge-amber"><span class="status-dot amber"></span> Connecting</span>
@@ -63,11 +83,23 @@ async function deleteAdapter(id, name) {
             {% endif %}
         </div>
 
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:4px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px;">
             <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Edit
             </a>
+
+            {% if adapter.enabled %}
+            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAdapter('{{ adapter.id }}', '{{ adapter.name }}', true)" title="Disable this adapter — it will stop running">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                Disable
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-sm btn-primary" onclick="toggleAdapter('{{ adapter.id }}', '{{ adapter.name }}', false)" title="Enable this adapter — it will start running">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Enable
+            </button>
+            {% endif %}
 
             <button type="button" class="btn btn-sm btn-danger" onclick="deleteAdapter('{{ adapter.id }}', '{{ adapter.name }}')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>

@@ -245,11 +245,11 @@ function addTagRow(btn, data) {
     const card  = btn.closest('[data-thing-index]');
     const tbody = card.querySelector('.tag-tbody');
     const d     = data || {};
+    const thingKey = card.querySelector('.thing-key')?.value || '';
     const tr    = document.createElement('tr');
     tr.innerHTML = `
       <td style="padding:6px;">
-        <input type="text" class="form-input tag-id" style="min-width:110px;"
-          placeholder="tag_id" value="${esc(d.tag_id)}">
+        ${buildMetricSelectHtml(thingKey, d.tag_id, 'tag-id', '110px')}
       </td>
       <td style="padding:6px;">
         <input type="text" class="form-input tag-path" style="min-width:180px;"
@@ -270,12 +270,68 @@ function addTagRow(btn, data) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Synced metrics cache (per thing_key) — populated by syncThings()
+// ──────────────────────────────────────────────────────────────────────────
+window.SYNCED_THINGS_METRICS = window.SYNCED_THINGS_METRICS || {};
+
+// Build a Metric ID picker. `className` lets the same picker be reused in
+// the Tag table (tag-id) and the Metric Mappings table (metric-id).
+function buildMetricSelectHtml(thingKey, currentValue, className, minWidth) {
+    className = className || 'metric-id';
+    minWidth  = minWidth  || '140px';
+    const metrics = window.SYNCED_THINGS_METRICS[thingKey] || [];
+    currentValue = currentValue || '';
+    if (metrics.length === 0) {
+        return `<input type="text" class="form-input ${className}" style="min-width:${minWidth};"
+            placeholder="Sync Things to filter" value="${esc(currentValue)}">`;
+    }
+    let options = `<option value="">— Select metric for this Thing —</option>`;
+    let matched = false;
+    metrics.forEach(m => {
+        const sel = (m.key === currentValue) ? 'selected' : '';
+        if (sel) matched = true;
+        const label = m.display_name && m.display_name !== m.key ? `${m.key} — ${m.display_name}` : m.key;
+        options += `<option value="${esc(m.key)}" ${sel}>${esc(label)}</option>`;
+    });
+    if (currentValue && !matched) {
+        options += `<option value="${esc(currentValue)}" selected>${esc(currentValue)} (not in template)</option>`;
+    }
+    return `<select class="form-input ${className}" style="min-width:${minWidth};">${options}</select>`;
+}
+
+function refreshMetricSelectsInCard(card) {
+    if (!card) return;
+    const thingKey = card.querySelector('.thing-key')?.value || '';
+
+    // Tag table — first column is Tag ID (tag-id), make it a metric picker
+    card.querySelectorAll('.tag-tbody tr').forEach(row => {
+        const tagCell = row.querySelector('td:first-child');
+        if (!tagCell) return;
+        const currentValue = tagCell.querySelector('.tag-id')?.value || '';
+        tagCell.innerHTML = buildMetricSelectHtml(thingKey, currentValue, 'tag-id', '110px');
+    });
+
+    // Metric Mappings — second column is Metric ID (metric-id)
+    card.querySelectorAll('.metric-tbody tr').forEach(row => {
+        const metricCell = row.querySelectorAll('td')[1];
+        if (!metricCell) return;
+        const currentValue = metricCell.querySelector('.metric-id')?.value || '';
+        metricCell.innerHTML = buildMetricSelectHtml(thingKey, currentValue, 'metric-id', '140px');
+    });
+}
+
+function refreshAllMetricSelects() {
+    document.querySelectorAll('[data-thing-index]').forEach(refreshMetricSelectsInCard);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Metric mapping row management
 // ──────────────────────────────────────────────────────────────────────────
 function addMetricRow(btn, data) {
     const card  = btn.closest('[data-thing-index]');
     const tbody = card.querySelector('.metric-tbody');
     const d     = data || {};
+    const thingKey = card.querySelector('.thing-key')?.value || '';
     const tr    = document.createElement('tr');
     tr.innerHTML = `
       <td style="padding:6px;">
@@ -283,8 +339,7 @@ function addMetricRow(btn, data) {
           placeholder="tag_id" value="${esc(d.tag_id)}">
       </td>
       <td style="padding:6px;">
-        <input type="text" class="form-input metric-id" style="min-width:140px;"
-          placeholder="metric_id" value="${esc(d.metric_id)}">
+        ${buildMetricSelectHtml(thingKey, d.metric_id)}
       </td>
       <td style="padding:6px;">
         <button type="button" class="btn btn-secondary" style="padding:4px 10px;color:var(--accent-red);"
@@ -443,6 +498,13 @@ async function syncThings(btn) {
             statusEl.style.color = 'var(--accent-amber)';
             return;
         }
+        // Cache metrics per thing_key for filtered Metric ID dropdowns
+        things.forEach(t => {
+            if (t.thing_key) {
+                window.SYNCED_THINGS_METRICS[t.thing_key] = t.metrics || [];
+            }
+        });
+        refreshAllMetricSelects();
         showThingPicker(things);
         statusEl.textContent = `Loaded ${things.length} thing(s)`;
         statusEl.style.color = 'var(--accent-green)';
@@ -490,12 +552,22 @@ function addThingFromSync(thingKey, thingName) {
     });
     if (existing) {
         existing.querySelector('.thing-name').value = thingName;
+        refreshMetricSelectsInCard(existing);
         return;
     }
     const node = addThing();
     node.querySelector('.thing-key').value = thingKey;
     node.querySelector('.thing-name').value = thingName;
+    refreshMetricSelectsInCard(node);
 }
+
+// When a user manually edits the thing-key, re-filter that card's Metric ID dropdowns
+document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('thing-key')) {
+        const card = e.target.closest('[data-thing-index]');
+        if (card) refreshMetricSelectsInCard(card);
+    }
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Bootstrap

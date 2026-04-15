@@ -759,11 +759,12 @@
 
     // ── Add Read Tag Row ──
     function addReadTag(btn) {
-        const tbody = btn.closest('.thing-card') ?
-            btn.closest('.thing-card').querySelector('.read-tags-table tbody') :
-            btn.closest('div').querySelector('.read-tags-table tbody');
+        const card = btn.closest('.thing-card');
+        const tbody = card ? card.querySelector('.read-tags-table tbody')
+                           : btn.closest('div').querySelector('.read-tags-table tbody');
+        const thingKey = card ? (card.querySelector('.thing-key')?.value || '') : '';
         const row = `<tr>
-            <td><input type="text" class="form-input rtag-id" style="padding:6px 10px;" placeholder="e.g. temperature"></td>
+            <td>${buildMetricSelectHtml(thingKey, '', 'rtag-id')}</td>
             <td><input type="text" class="form-input rtag-node" style="padding:6px 10px;" placeholder="e.g. 1009"></td>
             <td><input type="number" class="form-input rtag-ns" style="padding:6px 10px; width:80px;" value="2"></td>
             <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
@@ -774,11 +775,12 @@
 
     // ── Add Derived Tag Row ──
     function addDerivedTag(btn) {
-        const tbody = btn.closest('.thing-card') ?
-            btn.closest('.thing-card').querySelector('.derived-tags-table tbody') :
-            btn.closest('div').querySelector('.derived-tags-table tbody');
+        const card = btn.closest('.thing-card');
+        const tbody = card ? card.querySelector('.derived-tags-table tbody')
+                           : btn.closest('div').querySelector('.derived-tags-table tbody');
+        const thingKey = card ? (card.querySelector('.thing-key')?.value || '') : '';
         const row = `<tr>
-            <td><input type="text" class="form-input dtag-id" style="padding:6px 10px;" placeholder="e.g. avg_temp"></td>
+            <td>${buildMetricSelectHtml(thingKey, '', 'dtag-id')}</td>
             <td><textarea class="form-textarea dtag-expr" style="font-family:monospace; min-height:36px; padding:6px 10px; font-size:12px;" placeholder="(tag1 + tag2) / 2"></textarea></td>
             <td><input type="text" class="form-input dtag-sources" style="padding:6px 10px;" placeholder="tag1, tag2"></td>
             <td><select class="form-select dtag-type" style="padding:6px 10px;"><option value="number">number</option><option value="string">string</option><option value="boolean">boolean</option></select></td>
@@ -788,13 +790,77 @@
         refreshSummary();
     }
 
+    // ── Synced metrics cache (per thing_key) ──
+    // Populated by syncThings() — maps thing_key -> [{key, display_name}, ...]
+    window.SYNCED_THINGS_METRICS = window.SYNCED_THINGS_METRICS || {};
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Build a <select> populated from synced metrics for `thingKey`.
+    // Falls back to a free-text <input> when no sync data is available.
+    // `className` is the CSS class so the same picker can be reused in
+    // Metric Mappings (mmap-metric), Read Tags (rtag-id), Derived Tags (dtag-id), etc.
+    function buildMetricSelectHtml(thingKey, currentValue, className, extraStyle) {
+        className = className || 'mmap-metric';
+        extraStyle = extraStyle || '';
+        const metrics = window.SYNCED_THINGS_METRICS[thingKey] || [];
+        currentValue = currentValue || '';
+        if (metrics.length === 0) {
+            return `<input type="text" class="form-input ${className}" style="padding:6px 10px;${extraStyle}"
+                value="${escapeHtml(currentValue)}" placeholder="Sync Things to filter">`;
+        }
+        let options = `<option value="">— Select metric for this Thing —</option>`;
+        let matched = false;
+        metrics.forEach(m => {
+            const sel = (m.key === currentValue) ? 'selected' : '';
+            if (sel) matched = true;
+            const label = m.display_name && m.display_name !== m.key ? `${m.key} — ${m.display_name}` : m.key;
+            options += `<option value="${escapeHtml(m.key)}" ${sel}>${escapeHtml(label)}</option>`;
+        });
+        if (currentValue && !matched) {
+            options += `<option value="${escapeHtml(currentValue)}" selected>${escapeHtml(currentValue)} (not in template)</option>`;
+        }
+        return `<select class="form-select ${className}" style="padding:6px 10px;${extraStyle}">${options}</select>`;
+    }
+
+    // Refresh the Tag/Metric ID cells in all metric-aware tables of `card`,
+    // filtered by the card's current thing_key.
+    function refreshMetricSelectsInCard(card) {
+        if (!card) return;
+        const thingKey = card.querySelector('.thing-key')?.value || '';
+
+        // Tables where the FIRST column is a metric-pickable Tag/Metric ID
+        const tables = [
+            { tbodySel: '.metric-mappings-table tbody', valueSel: '.mmap-metric', className: 'mmap-metric' },
+            { tbodySel: '.read-tags-table tbody',       valueSel: '.rtag-id',     className: 'rtag-id'     },
+            { tbodySel: '.derived-tags-table tbody',    valueSel: '.dtag-id',     className: 'dtag-id'     },
+        ];
+        tables.forEach(t => {
+            card.querySelectorAll(`${t.tbodySel} tr`).forEach(row => {
+                const firstCell = row.querySelector('td:first-child');
+                if (!firstCell) return;
+                const currentValue = firstCell.querySelector(t.valueSel)?.value || '';
+                firstCell.innerHTML = buildMetricSelectHtml(thingKey, currentValue, t.className);
+            });
+        });
+    }
+
+    function refreshAllMetricSelects() {
+        document.querySelectorAll('.thing-card').forEach(refreshMetricSelectsInCard);
+    }
+
     // ── Add Metric Mapping Row ──
     function addMetricMapping(btn) {
-        const tbody = btn.closest('.thing-card') ?
-            btn.closest('.thing-card').querySelector('.metric-mappings-table tbody') :
-            btn.closest('div').querySelector('.metric-mappings-table tbody');
+        const card = btn.closest('.thing-card');
+        const tbody = card ? card.querySelector('.metric-mappings-table tbody')
+                           : btn.closest('div').querySelector('.metric-mappings-table tbody');
+        const thingKey = card ? (card.querySelector('.thing-key')?.value || '') : '';
         const row = `<tr>
-            <td><input type="text" class="form-input mmap-metric" style="padding:6px 10px;" placeholder="e.g. machine.status"></td>
+            <td>${buildMetricSelectHtml(thingKey, '')}</td>
             <td><input type="text" class="form-input mmap-tag" style="padding:6px 10px;" placeholder="e.g. machine_status"></td>
             <td><select class="form-select mmap-type" style="padding:6px 10px;"><option value="number">number</option><option value="string">string</option><option value="boolean">boolean</option></select></td>
             <td><button type="button" class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); refreshSummary();">Delete</button></td>
@@ -970,6 +1036,14 @@
                 if (statusEl) { statusEl.textContent = 'No things found in your cloud account.'; statusEl.style.color = 'var(--accent-amber)'; }
                 return;
             }
+            // Cache metrics per thing_key so Metric Mapping dropdowns can be filtered
+            things.forEach(t => {
+                if (t.thing_key) {
+                    window.SYNCED_THINGS_METRICS[t.thing_key] = t.metrics || [];
+                }
+            });
+            // Refresh any existing Metric Mapping rows so they pick up the new options
+            refreshAllMetricSelects();
             showThingPicker(things);
             if (statusEl) { statusEl.textContent = `Loaded ${things.length} thing(s)`; statusEl.style.color = 'var(--accent-green)'; }
         } catch (err) {
@@ -1015,8 +1089,9 @@
             if (card.querySelector('.thing-key')?.value === thingKey) existing = card;
         });
         if (existing) {
-            // Just update the name
+            // Just update the name and re-filter metrics for this card
             existing.querySelector('.thing-name').value = thingName;
+            refreshMetricSelectsInCard(existing);
             return;
         }
         // Add new thing card with the given key
@@ -1025,7 +1100,22 @@
         const newCard = cards[cards.length - 1];
         newCard.querySelector('.thing-key').value = thingKey;
         newCard.querySelector('.thing-name').value = thingName;
+        refreshMetricSelectsInCard(newCard);
     }
+
+    // When user manually edits a thing-key, re-filter the Metric ID dropdowns in that card
+    document.addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('thing-key')) {
+            const card = e.target.closest('.thing-card');
+            if (card) refreshMetricSelectsInCard(card);
+        }
+    });
+
+    // On initial page load, convert any pre-rendered Metric ID inputs that have
+    // a synced thing_key into dropdowns. (No-op if nothing has been synced yet.)
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshAllMetricSelects();
+    });
 
     // ── Download Config as JSON file ──
     function downloadConfig() {

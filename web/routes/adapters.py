@@ -177,6 +177,10 @@ async def adapter_toggle(adapter_id: str):
             new_enabled = not adapter["enabled"]
             new_status = "stopped" if not new_enabled else "connecting"
             await store.toggle_adapter_enabled(adapter_id, new_enabled, new_status)
+            await snapshots_routes.capture_snapshot(
+                trigger="adapter_toggled",
+                name=f"Adapter {'enabled' if new_enabled else 'disabled'}: {adapter['name']}",
+            )
             if watchdog:
                 watchdog.restart_task("adapters")
     return RedirectResponse("/adapters", status_code=302)
