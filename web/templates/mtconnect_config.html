@@ -12,7 +12,7 @@
 {% endif %}
 
 <!-- Action Bar -->
-<div style="display:flex; gap:12px; margin-bottom:20px; padding:16px 20px; background:var(--bg-card);
+<div style="display:flex; gap:10px; margin-bottom:16px; padding:12px 16px; background:var(--bg-card);
      border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap;
      align-items:center; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm);">
     <button type="button" class="btn btn-secondary" onclick="previewJson()">Preview JSON</button>
@@ -21,6 +21,9 @@
         Upload JSON
         <input type="file" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
     </label>
+    <button type="button" class="btn btn-secondary" onclick="syncThings(this)" style="white-space:nowrap;">
+        Sync Things
+    </button>
     <div style="flex:1;"></div>
     <a href="/adapters" class="btn btn-secondary">Cancel</a>
     <button type="button" class="btn btn-primary" onclick="saveAdapter()">Save &amp; Start Adapter</button>
@@ -51,8 +54,15 @@
         <span class="chevron open" id="chevron-section-b">&#9660;</span>
     </div>
     <div class="collapsible-body open" id="section-b">
+        <!-- Sync Things Bar -->
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; padding:10px 14px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            <span style="font-size:13px; color:var(--text-secondary); flex:1;">
+                Load registered Things from your Datonis cloud account (uses API key &amp; secret from Settings).
+            </span>
+            <span id="sync-things-status" style="font-size:12px; color:var(--text-secondary);"></span>
+        </div>
         <div id="things-container"></div>
-        <button type="button" class="btn btn-secondary" style="margin-top:12px;" onclick="addThing()">
+        <button type="button" class="btn btn-secondary" style="margin-top:8px;" onclick="addThing()">
             + Add Thing
         </button>
     </div>
@@ -79,17 +89,17 @@ let thingCount = 0;
 
 function makeThingHTML(idx) {
     return `
-<div class="card" style="margin-bottom:20px;" data-thing-index="${idx}">
+<div class="card" style="margin-bottom:14px;padding:14px;" data-thing-index="${idx}">
 
   <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <h3 style="font-size:15px;font-weight:600;color:var(--accent-purple);">Thing #${idx + 1}</h3>
-    <button type="button" class="btn btn-secondary" style="color:var(--accent-red);"
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="font-size:14px;font-weight:600;color:var(--accent-purple);">Thing #${idx + 1}</h3>
+    <button type="button" class="btn btn-secondary" style="color:var(--accent-red);font-size:12px;padding:4px 10px;"
       onclick="this.closest('[data-thing-index]').remove()">Remove Thing</button>
   </div>
 
   <!-- Identity -->
-  <div class="grid-2" style="margin-bottom:16px;">
+  <div class="grid-3" style="margin-bottom:10px;">
     <div class="form-group">
       <label class="form-label">Thing Key</label>
       <input type="text" class="form-input thing-key" placeholder="auto-generated" value="">
@@ -98,26 +108,26 @@ function makeThingHTML(idx) {
       <label class="form-label">Thing Name</label>
       <input type="text" class="form-input thing-name" placeholder="e.g. CNC Machine 1" value="">
     </div>
-    <div class="form-group" style="grid-column:1/-1;">
+    <div class="form-group">
       <label class="form-label">Description</label>
-      <input type="text" class="form-input thing-description" placeholder="Optional description" value="">
+      <input type="text" class="form-input thing-description" placeholder="Optional" value="">
     </div>
   </div>
 
   <!-- Connection -->
-  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
-    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em;">Connection</div>
-    <div class="grid-2">
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Connection</div>
+    <div class="grid-3">
       <div class="form-group" style="grid-column:1/-1;">
         <label class="form-label">Server URL</label>
         <input type="text" class="form-input thing-server-url" placeholder="http://localhost:5000/current" value="">
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Full URL to the MTConnect agent endpoint</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Full URL to the MTConnect agent endpoint</div>
       </div>
       <div class="form-group">
         <label class="form-label">Timeout (seconds)</label>
         <input type="number" class="form-input thing-timeout" value="10" min="1">
       </div>
-      <div class="form-group" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="form-group" style="display:flex;flex-direction:column;gap:6px;">
         <label class="form-label">Verify SSL</label>
         <label class="toggle-switch">
           <input type="checkbox" class="thing-verify-ssl">
@@ -128,9 +138,9 @@ function makeThingHTML(idx) {
   </div>
 
   <!-- Scan Settings -->
-  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
-    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em;">Scan Settings</div>
-    <div class="grid-2">
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Scan Settings</div>
+    <div class="grid-3">
       <div class="form-group">
         <label class="form-label">Scan Interval (ms)</label>
         <input type="number" class="form-input thing-scan-interval" value="5000" min="500">
@@ -139,7 +149,7 @@ function makeThingHTML(idx) {
         <label class="form-label">Send Interval (ms)</label>
         <input type="number" class="form-input thing-send-interval" value="30000" min="1000">
       </div>
-      <div class="form-group" style="display:flex;flex-direction:column;gap:8px;">
+      <div class="form-group" style="display:flex;flex-direction:column;gap:6px;">
         <label class="form-label">Disabled</label>
         <label class="toggle-switch">
           <input type="checkbox" class="thing-disabled">
@@ -150,20 +160,20 @@ function makeThingHTML(idx) {
   </div>
 
   <!-- Tag Configs -->
-  <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-bottom:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Tag Configuration</div>
-      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;"
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Tag Configuration</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
         data-action="add-tag" onclick="addTagRow(this)">+ Add Tag</button>
     </div>
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="border-bottom:1px solid var(--border-color);">
-            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Tag ID</th>
-            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Tag Path (XPath)</th>
-            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Type</th>
-            <th style="padding:8px;"></th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Tag Path (XPath)</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Type</th>
+            <th style="padding:6px;"></th>
           </tr>
         </thead>
         <tbody class="tag-tbody"></tbody>
@@ -172,19 +182,19 @@ function makeThingHTML(idx) {
   </div>
 
   <!-- Metric Mappings -->
-  <div style="border-top:1px solid var(--border-color);padding-top:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Metric Mappings</div>
-      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;"
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Metric Mappings</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
         data-action="add-metric" onclick="addMetricRow(this)">+ Add Mapping</button>
     </div>
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="border-bottom:1px solid var(--border-color);">
-            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Tag ID</th>
-            <th style="text-align:left;padding:8px;color:var(--text-secondary);">Metric ID</th>
-            <th style="padding:8px;"></th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Metric ID</th>
+            <th style="padding:6px;"></th>
           </tr>
         </thead>
         <tbody class="metric-tbody"></tbody>
@@ -405,6 +415,89 @@ function esc(s) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Sync Things from Datonis Cloud
+// ──────────────────────────────────────────────────────────────────────────
+async function syncThings(btn) {
+    const statusEl = document.getElementById('sync-things-status');
+    btn.disabled = true;
+    btn.textContent = 'Syncing...';
+    statusEl.textContent = 'Connecting to Datonis cloud...';
+    statusEl.style.color = 'var(--text-secondary)';
+    try {
+        const resp = await fetch('/api/adapters/sync-things');
+        if (!resp.ok) {
+            statusEl.textContent = `Server error (HTTP ${resp.status})`;
+            statusEl.style.color = 'var(--accent-red)';
+            return;
+        }
+        const result = await resp.json();
+        if (!result.success) {
+            statusEl.textContent = result.message;
+            statusEl.style.color = 'var(--accent-red)';
+            alert('Sync Failed: ' + result.message);
+            return;
+        }
+        const things = result.things || [];
+        if (things.length === 0) {
+            statusEl.textContent = 'No things found in your cloud account.';
+            statusEl.style.color = 'var(--accent-amber)';
+            return;
+        }
+        showThingPicker(things);
+        statusEl.textContent = `Loaded ${things.length} thing(s)`;
+        statusEl.style.color = 'var(--accent-green)';
+    } catch (err) {
+        statusEl.textContent = 'Network error: ' + err.message;
+        statusEl.style.color = 'var(--accent-red)';
+        alert('Sync Failed: Could not reach the sync endpoint.\n\n' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sync Things';
+    }
+}
+
+function showThingPicker(things) {
+    let rows = things.map(t => `
+        <tr>
+            <td style="padding:8px 6px;"><input type="checkbox" class="sync-check" data-key="${esc(t.thing_key)}" data-name="${esc(t.name || t.thing_key)}" checked></td>
+            <td style="padding:8px 6px; font-family:monospace; font-size:12px; color:var(--accent-blue);">${esc(t.thing_key)}</td>
+            <td style="padding:8px 6px; font-weight:500;">${esc(t.name) || '—'}</td>
+        </tr>`).join('');
+    const modal = document.getElementById('sync-modal');
+    document.getElementById('sync-modal-body').innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="border-bottom:1px solid var(--border-color);">
+                <th style="width:40px;padding:8px 6px;"><input type="checkbox" id="sync-check-all" checked onchange="document.querySelectorAll('.sync-check').forEach(c=>c.checked=this.checked)"></th>
+                <th style="text-align:left;padding:8px 6px;color:var(--text-secondary);">Thing Key</th>
+                <th style="text-align:left;padding:8px 6px;color:var(--text-secondary);">Name</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    modal.classList.add('show');
+    document.getElementById('sync-import-btn').onclick = function () {
+        document.querySelectorAll('.sync-check:checked').forEach(cb => {
+            addThingFromSync(cb.dataset.key, cb.dataset.name);
+        });
+        modal.classList.remove('show');
+    };
+}
+
+function addThingFromSync(thingKey, thingName) {
+    // Check if thing already exists
+    let existing = null;
+    document.querySelectorAll('[data-thing-index]').forEach(card => {
+        if (card.querySelector('.thing-key')?.value === thingKey) existing = card;
+    });
+    if (existing) {
+        existing.querySelector('.thing-name').value = thingName;
+        return;
+    }
+    const node = addThing();
+    node.querySelector('.thing-key').value = thingKey;
+    node.querySelector('.thing-name').value = thingName;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Bootstrap
 // ──────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -416,6 +509,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<!-- Sync Things Picker Modal -->
+<div class="modal-overlay" id="sync-modal">
+    <div class="modal" style="max-width:700px; width:95%;">
+        <div class="modal-header">
+            <h2 style="font-size:18px; font-weight:600;">Select Things to Import</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">&#10005;</button>
+        </div>
+        <div id="sync-modal-body" style="max-height:400px; overflow:auto; margin:12px 0;"></div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button id="sync-import-btn" class="btn btn-primary">Import Selected</button>
+            <button class="btn btn-secondary"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <!-- JSON Preview Modal -->
 <div class="modal-overlay" id="json-modal">
     <div class="modal">
@@ -425,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 onclick="document.getElementById('json-modal').classList.remove('show')">&#10005;</button>
         </div>
         <pre class="code-block" id="json-preview" style="max-height:400px; overflow:auto;"></pre>
-        <div style="margin-top:16px; display:flex; gap:8px;">
+        <div style="margin-top:12px; display:flex; gap:8px;">
             <button class="btn btn-sm btn-primary" onclick="copyJson()">Copy</button>
             <button class="btn btn-sm btn-secondary"
                 onclick="document.getElementById('json-modal').classList.remove('show')">Close</button>
