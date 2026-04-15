@@ -26,26 +26,33 @@
         </span>
     </div>
     <form method="POST" action="/settings/cloud">
-        <div class="grid-2">
-            <div class="form-group" style="grid-column: span 2;">
+        <div class="grid-3">
+            <div class="form-group" style="grid-column: span 3;">
                 <label class="form-label">Cloud Endpoint URL</label>
                 <input type="url" name="endpoint_url" class="form-input"
                        value="{{ config.cloud.endpoint_url if config else '' }}"
-                       placeholder="https://api.datonis.io:443" style="font-size:15px;">
+                       placeholder="https://api.datonis.io:443">
             </div>
             <div class="form-group">
                 <label class="form-label" for="api_key">Access Key</label>
                 <input type="text" class="form-input" id="api_key" name="api_key"
                        value="{{ config.cloud.api_key if config and config.cloud.api_key != 'access key' else '' }}"
-                       placeholder="Enter Datonis Access Key" style="font-size:15px; font-family:monospace;">
-                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Your Datonis Cloud Access Key. Leave blank to keep current key.</p>
+                       placeholder="Enter Datonis Access Key" style="font-family:monospace;">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">Leave blank to keep current key.</p>
             </div>
             <div class="form-group">
                 <label class="form-label" for="secret_key">Secret Key</label>
                 <input type="text" class="form-input" id="secret_key" name="secret_key"
                        value="{{ config.cloud.secret_key if config and config.cloud.secret_key != 'secret key' else '' }}"
-                       placeholder="Enter Datonis Secret Key" style="font-size:15px; font-family:monospace;">
-                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Your Datonis Cloud Secret Key. Used to HMAC-sign data payloads. Leave blank to keep current key.</p>
+                       placeholder="Enter Datonis Secret Key" style="font-family:monospace;">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">Used to HMAC-sign data payloads. Leave blank to keep current key.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="gateway_key">Gateway Key</label>
+                <input type="text" class="form-input" id="gateway_key" name="gateway_key"
+                       value="{{ config.cloud.gateway_key if config and config.cloud.gateway_key else '' }}"
+                       placeholder="Gateway Key (optional)" style="font-family:monospace;">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">Optional. Used for sending snapshots to Datonis.</p>
             </div>
             <div class="form-group">
                 <label class="form-label">Edge ID</label>
@@ -54,19 +61,12 @@
                        placeholder="edge-plant-01">
             </div>
             <div class="form-group">
-                <label class="form-label" for="gateway_key">Gateway Key</label>
-                <input type="text" class="form-input" id="gateway_key" name="gateway_key"
-                       value="{{ config.cloud.gateway_key if config and config.cloud.gateway_key else '' }}"
-                       placeholder="Enter Gateway Key (optional)" style="font-size:15px; font-family:monospace;">
-                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Optional Gateway Key for sending snapshots to Datonis. Leave blank to keep current key.</p>
-            </div>
-            <div class="form-group">
                 <label class="form-label">Request Timeout (secs)</label>
                 <input type="number" name="timeout_secs" class="form-input"
                        value="{{ config.cloud.timeout_secs if config else 10 }}" min="1" max="120">
             </div>
             <div class="form-group">
-                <label class="form-label">Batch Size (events per POST)</label>
+                <label class="form-label">Batch Size (events/POST)</label>
                 <input type="number" name="batch_size" class="form-input"
                        value="{{ config.cloud.batch_size if config else 100 }}" min="1" max="10000">
             </div>

@@ -40,7 +40,7 @@
         <span class="chevron" id="chevron-section-a">&#9660;</span>
     </div>
     <div class="collapsible-body" id="section-a">
-        <div class="grid-2">
+        <div class="grid-3">
             <div class="form-group">
                 <label class="form-label">Adapter Display Name</label>
                 <input type="text" name="adapter_name" class="form-input" value="{{ adapter_name or 'OPC-UA Adapter' }}"
@@ -83,13 +83,13 @@
         </button>
 
         <!-- Sync Things Bar -->
-        <div
+        <!-- <div
             style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:10px 14px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border-color);">
             <span style="font-size:13px; color:var(--text-secondary); flex:1;">
                 Load registered Things from your Datonis cloud account (uses API key &amp; secret from Settings).
             </span>
             <span id="sync-things-status" style="font-size:12px; color:var(--text-secondary);"></span>
-        </div>
+        </div> -->
 
         <!-- Search Bar -->
         <div class="search-bar" style="margin-bottom:16px;">
@@ -133,7 +133,7 @@
                     <span class="card-title">Thing: {{ thing.get('name', 'Unnamed') }}</span>
                     <button type="button" class="btn btn-sm btn-danger" onclick="removeThing(this)">Remove</button>
                 </div>
-                <div class="grid-2">
+                <div class="grid-4">
                     <div class="form-group">
                         <label class="form-label">Thing Name</label>
                         <input type="text" class="form-input thing-name" value="{{ thing.get('name', '') }}" required>
@@ -142,6 +142,22 @@
                         <label class="form-label">Thing Key</label>
                         <input type="text" class="form-input thing-key" value="{{ thing.get('thing_key', '') }}">
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">Publish Mode</label>
+                        <select class="form-select thing-publish-mode">
+                            <option value="server" {{ 'selected' if thing.get('publish_mode')=='server' }}>Server (push on change)</option>
+                            <option value="poll" {{ 'selected' if thing.get('publish_mode')=='poll' }}>Poll (push every interval)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Config Mode</label>
+                        <select class="form-select thing-config-mode">
+                            <option value="read_write" {{ 'selected' if thing.get('config_mode')=='read_write' }}>Read & Write</option>
+                            <option value="read_only" {{ 'selected' if thing.get('config_mode')=='read_only' }}>Read Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid-4">
                     <div class="form-group">
                         <label class="form-label">Scan Interval (ms)</label>
                         <input type="number" class="form-input thing-scan-interval"
@@ -156,24 +172,6 @@
                         <label class="form-label">Heartbeat Interval (ms)</label>
                         <input type="number" class="form-input thing-heartbeat"
                             value="{{ thing.get('heartbeat_interval_ms', 120000) }}" min="5000">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Publish Mode</label>
-                        <select class="form-select thing-publish-mode">
-                            <option value="server" {{ 'selected' if thing.get('publish_mode')=='server' }}>Server (push
-                                on change)</option>
-                            <option value="poll" {{ 'selected' if thing.get('publish_mode')=='poll' }}>Poll (push every
-                                interval)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Config Mode</label>
-                        <select class="form-select thing-config-mode">
-                            <option value="read_write" {{ 'selected' if thing.get('config_mode')=='read_write' }}>Read &
-                                Write</option>
-                            <option value="read_only" {{ 'selected' if thing.get('config_mode')=='read_only' }}>Read
-                                Only</option>
-                        </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Adapter Reset Interval</label>
@@ -631,7 +629,7 @@
                 <span class="card-title">New Thing</span>
                 <button type="button" class="btn btn-sm btn-danger" onclick="removeThing(this)">Remove</button>
             </div>
-            <div class="grid-2">
+            <div class="grid-4">
                 <div class="form-group">
                     <label class="form-label">Thing Name</label>
                     <input type="text" class="form-input thing-name" value="" required oninput="refreshSummary()">
@@ -639,18 +637,6 @@
                 <div class="form-group">
                     <label class="form-label">Thing Key</label>
                     <input type="text" class="form-input thing-key" value="" placeholder="auto-generated if empty" oninput="refreshSummary()">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Scan Interval (ms)</label>
-                    <input type="number" class="form-input thing-scan-interval" value="2000" min="100" oninput="refreshSummary()">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Send Interval (ms)</label>
-                    <input type="number" class="form-input thing-send-interval" value="30000" min="1000" oninput="refreshSummary()">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Heartbeat Interval (ms)</label>
-                    <input type="number" class="form-input thing-heartbeat" value="120000" min="5000">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Publish Mode</label>
@@ -665,6 +651,20 @@
                         <option value="read_write">Read & Write</option>
                         <option value="read_only">Read Only</option>
                     </select>
+                </div>
+            </div>
+            <div class="grid-4">
+                <div class="form-group">
+                    <label class="form-label">Scan Interval (ms)</label>
+                    <input type="number" class="form-input thing-scan-interval" value="2000" min="100" oninput="refreshSummary()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Send Interval (ms)</label>
+                    <input type="number" class="form-input thing-send-interval" value="30000" min="1000" oninput="refreshSummary()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Heartbeat Interval (ms)</label>
+                    <input type="number" class="form-input thing-heartbeat" value="120000" min="5000">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Adapter Reset Interval</label>

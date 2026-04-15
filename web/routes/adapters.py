@@ -34,7 +34,7 @@ BACKUP_BASE = Path(__file__).resolve().parent.parent.parent.parent
 
 def _save_backup(adapter_type: str, adapter_name: str, config_json: str) -> None:
     """Save a timestamped JSON backup of the adapter config."""
-    backup_dir = BACKUP_BASE / f"{adapter_type}_conf_backup"
+    backup_dir = BACKUP_BASE / "Configuration Backup" / f"{adapter_type}_conf_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     safe_name = adapter_name.replace(" ", "_").replace("/", "_")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

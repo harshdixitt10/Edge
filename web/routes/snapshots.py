@@ -8,6 +8,7 @@ import json
 import uuid
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -16,12 +17,33 @@ from fastapi.templating import Jinja2Templates
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Snapshot Backup folder — same level as logs/ and data/ (one above edge_server/)
+SNAPSHOT_BACKUP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "Snapshot Backup"
+
 # Set by app factory
 templates: Jinja2Templates = None
 store = None
 config_manager = None
 watchdog = None
 http_connector = None  # HttpCloudConnector — used to push snapshots via gateway_key
+
+
+def _save_snapshot_file(name: str, trigger: str, snapshot_json: str) -> None:
+    """Save snapshot as a JSON file and keep only the last 10."""
+    try:
+        SNAPSHOT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = name.replace(" ", "_").replace("/", "_")[:50]
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"snapshot_{trigger}_{safe_name}_{ts}.json"
+        filepath = SNAPSHOT_BACKUP_DIR / filename
+        filepath.write_text(snapshot_json, encoding="utf-8")
+
+        # Prune: keep only the newest 10 snapshot files
+        snapshots = sorted(SNAPSHOT_BACKUP_DIR.glob("snapshot_*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for old_file in snapshots[10:]:
+            old_file.unlink(missing_ok=True)
+    except Exception as e:
+        logger.warning(f"Failed to save snapshot file: {e}")
 
 
 async def capture_snapshot(trigger: str, name: str) -> None:
@@ -67,13 +89,17 @@ async def capture_snapshot(trigger: str, name: str) -> None:
             ],
         }
 
+        snapshot_json_str = json.dumps(snapshot, indent=2)
         await store.save_snapshot(
             snapshot_id=str(uuid.uuid4()),
             name=name,
             trigger=trigger,
-            snapshot_json=json.dumps(snapshot, indent=2),
+            snapshot_json=snapshot_json_str,
         )
-        logger.info(f"📸 Snapshot created: {name} (trigger: {trigger})")
+        logger.info(f"Snapshot created: {name} (trigger: {trigger})")
+
+        # Save snapshot to file-based backup (keep last 10)
+        _save_snapshot_file(name, trigger, snapshot_json_str)
 
         # Push snapshot to Datonis cloud if gateway_key is configured
         gateway_key = cfg.cloud.gateway_key if hasattr(cfg.cloud, "gateway_key") else ""
