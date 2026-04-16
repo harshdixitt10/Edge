@@ -384,6 +384,18 @@ class LocalStore:
         )
         await self._db.commit()
 
+    async def sync_default_user(self, username: str, password_hash: str) -> None:
+        """Make `username` the only row in the users table with the supplied hash.
+        Removes stale rows (e.g. the original "admin" entry after a rename) so
+        they can't re-authenticate via the fallback lookup in web/app.py."""
+        await self._db.execute("DELETE FROM users WHERE username != ?", (username,))
+        await self._db.execute(
+            """INSERT INTO users (username, password_hash) VALUES (?, ?)
+               ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash""",
+            (username, password_hash),
+        )
+        await self._db.commit()
+
     # ── Activity Log Operations ───────────────
 
     async def update_activity(
