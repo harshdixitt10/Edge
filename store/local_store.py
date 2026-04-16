@@ -145,26 +145,46 @@ class LocalStore:
 
     # ── Event Operations ──────────────────────
 
+    def _event_to_row(self, event: DataEvent) -> tuple:
+        """Convert a DataEvent to a tuple of column values for INSERT."""
+        return (
+            event.id,
+            event.adapter_name,
+            event.thing_key,
+            event.node_id,
+            event.namespace,
+            event.tag_id,
+            event.metric_id,
+            json.dumps(event.value) if not isinstance(event.value, str) else event.value,
+            event.quality,
+            event.timestamp.isoformat(),
+            1 if event.sent else 0,
+            1 if event.is_backfill else 0,
+        )
+
     async def write_event(self, event: DataEvent) -> None:
         """Write a single event to the buffer."""
         await self._db.execute(
             """INSERT OR REPLACE INTO events
                (id, adapter, thing_key, node_id, namespace, tag_id, metric_id, value, quality, timestamp, sent, is_backfill)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                event.id,
-                event.adapter_name,
-                event.thing_key,
-                event.node_id,
-                event.namespace,
-                event.tag_id,
-                event.metric_id,
-                json.dumps(event.value) if not isinstance(event.value, str) else event.value,
-                event.quality,
-                event.timestamp.isoformat(),
-                1 if event.sent else 0,
-                1 if event.is_backfill else 0,
-            ),
+            self._event_to_row(event),
+        )
+        await self._db.commit()
+
+    async def write_events_bulk(self, events: list) -> None:
+        """Write multiple events in a single transaction (one commit).
+
+        Much faster than calling write_event() in a loop — at 3,600 events
+        per flush this reduces 3,600 commits to 1.
+        """
+        if not events:
+            return
+        await self._db.executemany(
+            """INSERT OR REPLACE INTO events
+               (id, adapter, thing_key, node_id, namespace, tag_id, metric_id, value, quality, timestamp, sent, is_backfill)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [self._event_to_row(ev) for ev in events],
         )
         await self._db.commit()
 

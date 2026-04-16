@@ -221,13 +221,12 @@ class CloudConnector:
                         # Case 1: Active Network, No Backlog, No active backfill — Send directly
                         success = await self.http.publish(ready_events)
                         now_utc = datetime.now(timezone.utc).isoformat()
-                        
+
                         if success:
-                            # Save to store directly marked as 'sent' for UI history, skipping the queue
                             for ev in ready_events:
                                 ev.sent = True
-                                await self.store.write_event(ev)
-                                
+                            await self.store.write_events_bulk(ready_events)
+
                             thing_keys = set(e.thing_key for e in ready_events)
                             for tk in thing_keys:
                                 await self.store.update_activity(
@@ -238,11 +237,10 @@ class CloudConnector:
                                 )
                             logger.info(f"📤 Directly sent {len(ready_events)} event(s) to cloud (bypass buffer)")
                         else:
-                            # Send failed — Start buffering
                             for ev in ready_events:
                                 ev.sent = False
-                                await self.store.write_event(ev)
-                                
+                            await self.store.write_events_bulk(ready_events)
+
                             thing_keys = set(e.thing_key for e in ready_events)
                             for tk in thing_keys:
                                 await self.store.update_activity(
@@ -251,11 +249,10 @@ class CloudConnector:
                                 )
                     else:
                         # Case 2: Network Down OR Backlog exists — Buffer locally
-                        # Events MUST be buffered logically to be backfilled progressively
                         for ev in ready_events:
                             ev.sent = False
-                            await self.store.write_event(ev)
-                            
+                        await self.store.write_events_bulk(ready_events)
+
                         logger.info(
                             f"💾 Buffered {len(ready_events)} event(s) locally "
                             f"(Backlog: {unsent_count}, Online: {self.http.connected}, Backfilling: {self.http.backfilling})"
