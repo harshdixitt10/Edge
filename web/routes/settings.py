@@ -20,6 +20,7 @@ templates: Jinja2Templates = None
 config_manager = None
 cloud_connector = None
 auth_manager = None
+store = None
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -153,6 +154,14 @@ async def change_credentials(
             config.auth.default_username = new_username
         if password_changed:
             config.auth.default_password_hash = auth_manager.hash_password(new_password)
+
+    # Keep the DB users table in sync with the new config so the old row can't
+    # be used to log in via the fallback store lookup in web/app.py.
+    if store is not None:
+        await store.sync_default_user(
+            config_manager.config.auth.default_username,
+            config_manager.config.auth.default_password_hash,
+        )
 
     await snapshots_routes.capture_snapshot(
         trigger="credentials_changed",

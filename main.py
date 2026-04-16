@@ -159,15 +159,22 @@ async def main() -> None:
         expiry_minutes=config.auth.jwt_expiry_minutes,
     )
 
-    existing_user = await store.get_user(config.auth.default_username)
-    if not existing_user:
-        # Hash the default password "changeme"
+    # Only bootstrap the default user on first run (when config has no stored hash).
+    # Never overwrite an existing hash — that would silently reset the admin's
+    # password to "changeme" on every restart after a credential change.
+    if not config.auth.default_password_hash:
         pwd_hash = auth_manager.hash_password("changeme")
-        await store.create_user(config.auth.default_username, pwd_hash)
-        # Also update config with the hash
         config.auth.default_password_hash = pwd_hash
         config_manager.save()
         logger.info(f"Default user '{config.auth.default_username}' created")
+
+    # Ensure the DB users table matches the config (single source of truth).
+    # This wipes stale rows — e.g. the original "admin" entry after a rename —
+    # that would otherwise keep working via the fallback lookup in web/app.py.
+    await store.sync_default_user(
+        config.auth.default_username,
+        config.auth.default_password_hash,
+    )
 
     # ── 4. Create Event Bus ──
     bus = EventBus(maxsize=10_000)

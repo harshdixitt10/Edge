@@ -103,6 +103,7 @@ def create_app(
     settings_routes.config_manager = config_manager
     settings_routes.cloud_connector = cloud_connector
     settings_routes.auth_manager = auth_manager
+    settings_routes.store = store
 
     activity_routes.templates = templates
     activity_routes.store = store
