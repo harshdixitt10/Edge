@@ -4,7 +4,7 @@ server:
   secret_key: change-me-in-production-use-a-long-random-string
   debug: false
 auth:
-  default_username: admin
+  default_username: harsh
   default_password_hash: $2b$12$cIHok4y/HrjCig3fwElx3OyG4QpMShpE.pAk533RKAH667NtEw1HO
   jwt_expiry_minutes: 60
   jwt_algorithm: HS256

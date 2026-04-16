@@ -11,7 +11,7 @@
 <div class="alert alert-success animate-in">Settings saved successfully!</div>
 {% endif %}
 {% if pw_success %}
-<div class="alert alert-success animate-in">Password changed successfully!</div>
+<div class="alert alert-success animate-in">Credentials updated successfully!</div>
 {% endif %}
 {% if pw_error %}
 <div class="alert alert-error animate-in">{{ pw_error }}</div>
@@ -151,29 +151,72 @@ async function testCloudConnection() {
     </form>
 </div>
 
-<!-- Change Password -->
+<!-- Change Credentials (Username + Password) -->
 <div class="card animate-in" style="margin-bottom:24px; animation-delay:0.2s;">
     <div class="card-header">
-        <span class="card-title">Change Password</span>
+        <span class="card-title">Change Login Credentials</span>
     </div>
-    <form method="POST" action="/settings/change-password">
+    <p style="font-size:13px; color:var(--text-secondary); margin:0 0 16px 0;">
+        Update the admin username and/or password. Current password is required to confirm.
+        Leave username or new password blank to keep that field unchanged.
+    </p>
+    <form method="POST" action="/settings/change-credentials" id="change-credentials-form">
         <div class="grid-2">
             <div class="form-group" style="grid-column: span 2;">
-                <label class="form-label">Current Password</label>
-                <input type="password" name="current_password" class="form-input" placeholder="Enter current password" required autocomplete="current-password">
+                <label class="form-label">Current Username</label>
+                <input type="text" class="form-input" value="{{ current_username }}" disabled
+                       style="opacity:0.7; cursor:not-allowed;">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">Logged-in account — to change it, enter a new username below.</p>
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">Current Password <span style="color:var(--accent-red);">*</span></label>
+                <input type="password" name="current_password" class="form-input" placeholder="Enter current password to confirm changes" required autocomplete="current-password">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">New Username</label>
+                <input type="text" name="new_username" class="form-input"
+                       placeholder="Leave blank to keep '{{ current_username }}'"
+                       autocomplete="username" minlength="3" maxlength="32"
+                       pattern="[A-Za-z0-9._\-]+"
+                       title="3–32 characters: letters, numbers, dot, underscore, hyphen">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">
+                    3–32 chars; letters, numbers, <code>. _ -</code> only. You will be signed out if you change this.
+                </p>
             </div>
             <div class="form-group">
                 <label class="form-label">New Password</label>
-                <input type="password" name="new_password" class="form-input" placeholder="At least 6 characters" required autocomplete="new-password">
+                <input type="password" name="new_password" id="cc-new-password" class="form-input" placeholder="Leave blank to keep current" autocomplete="new-password" minlength="6">
+                <p style="font-size:11px; color:var(--text-muted); margin-top:3px;">At least 6 characters.</p>
             </div>
             <div class="form-group">
                 <label class="form-label">Confirm New Password</label>
-                <input type="password" name="confirm_password" class="form-input" placeholder="Repeat new password" required autocomplete="new-password">
+                <input type="password" name="confirm_password" id="cc-confirm-password" class="form-input" placeholder="Repeat new password" autocomplete="new-password">
             </div>
         </div>
-        <button type="submit" class="btn btn-primary">Change Password</button>
+        <button type="submit" class="btn btn-primary">Save Credentials</button>
     </form>
 </div>
+
+<script>
+// Only require confirm-password when a new password was actually entered.
+(function () {
+    const form = document.getElementById('change-credentials-form');
+    if (!form) return;
+    const pw = document.getElementById('cc-new-password');
+    const cpw = document.getElementById('cc-confirm-password');
+    form.addEventListener('submit', function (e) {
+        if (pw.value && pw.value !== cpw.value) {
+            e.preventDefault();
+            alert('New password and confirmation do not match.');
+        }
+    });
+    // Make confirm required only if new password has a value
+    pw.addEventListener('input', function () {
+        if (pw.value) cpw.setAttribute('required', 'required');
+        else cpw.removeAttribute('required');
+    });
+})();
+</script>
 
 <!-- System Info (read-only) -->
 <div class="card animate-in" style="animation-delay:0.25s;">
