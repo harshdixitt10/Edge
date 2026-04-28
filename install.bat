@@ -70,9 +70,32 @@ python -m venv "%VENV_DIR%"
 echo [OK]    Virtual environment created
 
 REM ── Step 4: Install dependencies ──
-echo [INFO]  Installing dependencies...
-"%VENV_DIR%\Scripts\pip.exe" install --upgrade pip --quiet
-"%VENV_DIR%\Scripts\pip.exe" install -r "%EDGE_DIR%requirements.txt" --quiet
+echo [INFO]  Bootstrapping pip inside virtual environment...
+"%VENV_DIR%\Scripts\python.exe" -m ensurepip --upgrade >nul 2>&1
+
+echo [INFO]  Upgrading pip / setuptools / wheel to latest...
+"%VENV_DIR%\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel --disable-pip-version-check
+if %errorlevel% neq 0 (
+    echo [WARN]  pip upgrade failed — retrying with bootstrap from get-pip.py
+    powershell -Command "Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile '%TEMP%\get-pip.py'" >nul 2>&1
+    if exist "%TEMP%\get-pip.py" (
+        "%VENV_DIR%\Scripts\python.exe" "%TEMP%\get-pip.py" --force-reinstall
+        del /F /Q "%TEMP%\get-pip.py" >nul 2>&1
+    ) else (
+        echo [ERROR] Could not download get-pip.py. Check internet connection.
+        pause
+        exit /b 1
+    )
+)
+echo [OK]    pip is up to date
+
+echo [INFO]  Installing project dependencies...
+"%VENV_DIR%\Scripts\python.exe" -m pip install -r "%EDGE_DIR%requirements.txt" --disable-pip-version-check
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to install dependencies. See messages above.
+    pause
+    exit /b 1
+)
 echo [OK]    Dependencies installed
 
 REM ── Step 5: Create required directories ──
@@ -113,7 +136,7 @@ echo ═════════════════════════
 echo    Installation complete!
 echo.
 echo    Service name:  %SERVICE_NAME%
-echo    Web UI:        http://localhost:8090
+echo    Web UI:        http://localhost:8082
 echo    Login:         admin / changeme
 echo.
 echo    To stop:   taskkill /FI "WINDOWTITLE eq Datonis Edge Server"
