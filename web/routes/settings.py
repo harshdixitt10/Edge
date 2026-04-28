@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from core import credential_backup
 from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
@@ -162,6 +163,13 @@ async def change_credentials(
             config_manager.config.auth.default_username,
             config_manager.config.auth.default_password_hash,
         )
+
+    # Refresh local plaintext credential backup. We use the new password if it
+    # changed, otherwise the just-verified current_password.
+    credential_backup.write(
+        config_manager.config.auth.default_username,
+        new_password if password_changed else current_password,
+    )
 
     await snapshots_routes.capture_snapshot(
         trigger="credentials_changed",

@@ -1,11 +1,11 @@
 server:
   host: 0.0.0.0
-  port: 8090
+  port: 8082
   secret_key: change-me-in-production-use-a-long-random-string
   debug: false
 auth:
-  default_username: harsh
-  default_password_hash: $2b$12$cIHok4y/HrjCig3fwElx3OyG4QpMShpE.pAk533RKAH667NtEw1HO
+  default_username: '1234567'
+  default_password_hash: $2b$12$atXMFveNeOTBWlvneVTbROS504P7nuZSPZWxN6WD56KXAG8OTebUW
   jwt_expiry_minutes: 60
   jwt_algorithm: HS256
 cloud:

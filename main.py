@@ -29,6 +29,7 @@ import uvicorn
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core import credential_backup
 from core.config_manager import ConfigManager
 from core.event_bus import EventBus
 from core.watchdog import Watchdog
@@ -166,6 +167,7 @@ async def main() -> None:
         pwd_hash = auth_manager.hash_password("changeme")
         config.auth.default_password_hash = pwd_hash
         config_manager.save()
+        credential_backup.write(config.auth.default_username, "changeme")
         logger.info(f"Default user '{config.auth.default_username}' created")
 
     # Ensure the DB users table matches the config (single source of truth).
