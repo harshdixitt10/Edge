@@ -98,6 +98,20 @@ if %errorlevel% neq 0 (
 )
 echo [OK]    Dependencies installed
 
+REM ── Step 4b: Bootstrap default credentials (deterministic, install-time) ──
+REM This computes a real bcrypt hash for "changeme" on this machine and writes
+REM it into config.yaml, plus the local credential backup file. We use --force
+REM here because install.bat already reset config.yaml from the template, and
+REM any pre-existing hash should be discarded for a fresh install.
+echo [INFO]  Bootstrapping default credentials (admin / changeme)...
+"%VENV_DIR%\Scripts\python.exe" "%EDGE_DIR%scripts\bootstrap_credentials.py" --force
+if %errorlevel% neq 0 (
+    echo [ERROR] Credential bootstrap failed. Login will not work until this is fixed.
+    pause
+    exit /b 1
+)
+echo [OK]    Default credentials configured
+
 REM ── Step 5: Create required directories ──
 if not exist "%PARENT_DIR%\logs" mkdir "%PARENT_DIR%\logs"
 if not exist "%PARENT_DIR%\data" mkdir "%PARENT_DIR%\data"

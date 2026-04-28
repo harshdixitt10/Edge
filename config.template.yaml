@@ -11,8 +11,10 @@ server:
 
 auth:
   default_username: admin
-  # Default password: changeme  (change via Settings after first login)
-  default_password_hash: "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGqnpuBCRVCNc1KWDV7pWOz4rHi"
+  # Leave default_password_hash empty — on first launch the server
+  # auto-generates a bcrypt hash for the default password "changeme".
+  # After first login, change it via Settings.
+  default_password_hash: ""
 
 cloud:
   protocol: https
