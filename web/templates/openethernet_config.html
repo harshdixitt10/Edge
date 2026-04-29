@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+{% block title %}OpenEthernet Adapter Configuration — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ 'Edit' if is_edit else 'New' }} OpenEthernet Adapter</h1>
+    <p class="page-subtitle">Configure raw TCP socket connections, command-based tag mappings, and metric assignments</p>
+</div>
+
+{% if error is defined and error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<!-- Action Bar -->
+<div style="display:flex; gap:10px; margin-bottom:16px; padding:12px 16px; background:var(--bg-card);
+     border-radius:var(--radius-md); border:1px solid var(--border-color); flex-wrap:wrap;
+     align-items:center; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm);">
+    <button type="button" class="btn btn-secondary" onclick="previewJson()">Preview JSON</button>
+    <button type="button" class="btn btn-secondary" onclick="downloadConfig()">Download JSON</button>
+    <label class="btn btn-secondary" style="cursor:pointer; margin:0;">
+        Upload JSON
+        <input type="file" accept=".json,application/json" style="display:none;" onchange="uploadConfig(this)">
+    </label>
+    <button type="button" class="btn btn-secondary" onclick="syncThings(this)" style="white-space:nowrap;">
+        Sync Things
+    </button>
+    <div style="flex:1;"></div>
+    <a href="/adapters" class="btn btn-secondary">Cancel</a>
+    <button type="button" class="btn btn-primary" onclick="saveAdapter()">Save &amp; Start Adapter</button>
+</div>
+
+<form id="openethernet-form" method="POST" action="/adapters/openethernet/save">
+    <input type="hidden" name="adapter_id" value="{{ adapter_id }}">
+    <input type="hidden" name="config_json" id="config_json_hidden">
+
+    <!-- Section A — Global Settings -->
+    <div class="collapsible-header" onclick="toggleSection('section-a')">
+        <span class="card-title">Section A — Adapter Display Name</span>
+        <span class="chevron open" id="chevron-section-a">&#9660;</span>
+    </div>
+    <div class="collapsible-body open" id="section-a">
+        <div class="grid-2">
+            <div class="form-group">
+                <label class="form-label">Adapter Display Name</label>
+                <input type="text" name="adapter_name" class="form-input"
+                    value="{{ adapter_name or 'OpenEthernet Adapter' }}" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section B — Things -->
+    <div class="collapsible-header" onclick="toggleSection('section-b')">
+        <span class="card-title">Section B — Thing Configuration</span>
+        <span class="chevron open" id="chevron-section-b">&#9660;</span>
+    </div>
+    <div class="collapsible-body open" id="section-b">
+        <div id="things-container"></div>
+        <button type="button" class="btn btn-secondary" style="margin-top:8px;" onclick="addThing()">
+            + Add Thing
+        </button>
+    </div>
+</form>
+
+<script>
+const INITIAL_CONFIG = {{ config | tojson }};
+
+function toggleSection(id) {
+    document.getElementById(id).classList.toggle('open');
+    document.getElementById('chevron-' + id).classList.toggle('open');
+}
+
+let thingCount = 0;
+
+function makeThingHTML(idx) {
+    return `
+<div class="card" style="margin-bottom:14px;padding:14px;" data-thing-index="${idx}">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="font-size:14px;font-weight:600;color:var(--accent-amber);">Thing #${idx + 1}</h3>
+    <button type="button" class="btn btn-secondary" style="color:var(--accent-red);font-size:12px;padding:4px 10px;"
+      onclick="this.closest('[data-thing-index]').remove()">Remove Thing</button>
+  </div>
+
+  <div class="grid-3" style="margin-bottom:10px;">
+    <div class="form-group">
+      <label class="form-label">Thing Key</label>
+      <input type="text" class="form-input thing-key" placeholder="auto-generated" value="">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Thing Name</label>
+      <input type="text" class="form-input thing-name" placeholder="e.g. Lathe Machine" value="">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <input type="text" class="form-input thing-description" placeholder="Optional" value="">
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Connection</div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label class="form-label">IP Address</label>
+        <input type="text" class="form-input thing-ip" placeholder="192.168.120.1" value="">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Port</label>
+        <input type="number" class="form-input thing-port" value="4000" min="1" max="65535">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Timeout (ms)</label>
+        <input type="number" class="form-input thing-timeout" value="10000" min="100">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Command Prefix (ASCII bytes)</label>
+        <input type="text" class="form-input thing-prefix" value="13,10,2" placeholder="13,10,2">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Comma-separated decimal ASCII codes. The last byte is the start-of-payload marker.</div>
+      </div>
+      <div class="form-group" style="grid-column: span 2;">
+        <label class="form-label">Command Suffix (ASCII bytes)</label>
+        <input type="text" class="form-input thing-suffix" value="23,13,10,62" placeholder="23,13,10,62">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Comma-separated decimal ASCII codes. The last byte is the end-of-payload marker.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Scan Settings</div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label class="form-label">Scan Interval (ms)</label>
+        <input type="number" class="form-input thing-scan-interval" value="5000" min="500">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Send Interval (ms)</label>
+        <input type="number" class="form-input thing-send-interval" value="30000" min="1000">
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;gap:6px;">
+        <label class="form-label">Disabled</label>
+        <label class="toggle-switch">
+          <input type="checkbox" class="thing-disabled">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Tag Configuration</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
+        data-action="add-tag" onclick="addTagRow(this)">+ Add Tag</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color);">
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Command</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Type</th>
+            <th style="padding:6px;"></th>
+          </tr>
+        </thead>
+        <tbody class="tag-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-color);padding-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;">Metric Mappings</div>
+      <button type="button" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
+        data-action="add-metric" onclick="addMetricRow(this)">+ Add Mapping</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border-color);">
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Tag ID</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--text-secondary);">Metric ID</th>
+            <th style="padding:6px;"></th>
+          </tr>
+        </thead>
+        <tbody class="metric-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>`;
+}
+
+function addThing(thingData) {
+    const idx = thingCount++;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = makeThingHTML(idx);
+    const node = wrapper.firstElementChild;
+    document.getElementById('things-container').appendChild(node);
+    if (thingData) populateThing(node, thingData);
+    return node;
+}
+
+function populateThing(node, d) {
+    const q = (cls) => node.querySelector(cls);
+    q('.thing-key').value           = d.thing_key       || '';
+    q('.thing-name').value          = d.name            || '';
+    q('.thing-description').value   = d.description     || '';
+    q('.thing-ip').value            = d.ip_address      || '';
+    q('.thing-port').value          = d.port            || 4000;
+    q('.thing-prefix').value        = d.prefix          || '13,10,2';
+    q('.thing-suffix').value        = d.suffix          || '23,13,10,62';
+    q('.thing-timeout').value       = d.timeout_ms      || 10000;
+    q('.thing-scan-interval').value = d.scan_interval_ms || 5000;
+    q('.thing-send-interval').value = d.send_interval_ms || 30000;
+    q('.thing-disabled').checked    = !!d.disabled;
+
+    const addTagBtn    = node.querySelector('[data-action="add-tag"]');
+    const addMetricBtn = node.querySelector('[data-action="add-metric"]');
+    (d.tag_configs     || []).forEach(t => addTagRow(addTagBtn, t));
+    (d.metric_mappings || []).forEach(m => addMetricRow(addMetricBtn, m));
+}
+
+function addTagRow(btn, data) {
+    const card  = btn.closest('[data-thing-index]');
+    const tbody = card.querySelector('.tag-tbody');
+    const d     = data || {};
+    const thingKey = card.querySelector('.thing-key')?.value || '';
+    const tr    = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px;">
+        ${buildMetricSelectHtml(thingKey, d.tag_id, 'tag-id', '110px')}
+      </td>
+      <td style="padding:6px;">
+        <input type="text" class="form-input tag-command" style="min-width:180px;"
+          placeholder="Q600 RPM" value="${esc(d.command)}">
+      </td>
+      <td style="padding:6px;">
+        <select class="form-input tag-type" style="min-width:100px;">
+          <option value="number"  ${(d.value_type||'number')==='number' ?'selected':''}>number</option>
+          <option value="string"  ${d.value_type==='string'             ?'selected':''}>string</option>
+          <option value="boolean" ${d.value_type==='boolean'            ?'selected':''}>boolean</option>
+        </select>
+      </td>
+      <td style="padding:6px;">
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;color:var(--accent-red);"
+          onclick="this.closest('tr').remove()">Remove</button>
+      </td>`;
+    tbody.appendChild(tr);
+}
+
+window.SYNCED_THINGS_METRICS = window.SYNCED_THINGS_METRICS || {};
+
+function buildMetricSelectHtml(thingKey, currentValue, className, minWidth) {
+    className = className || 'metric-id';
+    minWidth  = minWidth  || '140px';
+    const metrics = window.SYNCED_THINGS_METRICS[thingKey] || [];
+    currentValue = currentValue || '';
+    if (metrics.length === 0) {
+        return `<input type="text" class="form-input ${className}" style="min-width:${minWidth};"
+            placeholder="Sync Things to filter" value="${esc(currentValue)}">`;
+    }
+    let options = `<option value="">— Select metric for this Thing —</option>`;
+    let matched = false;
+    metrics.forEach(m => {
+        const sel = (m.key === currentValue) ? 'selected' : '';
+        if (sel) matched = true;
+        const label = m.display_name && m.display_name !== m.key ? `${m.key} — ${m.display_name}` : m.key;
+        options += `<option value="${esc(m.key)}" ${sel}>${esc(label)}</option>`;
+    });
+    if (currentValue && !matched) {
+        options += `<option value="${esc(currentValue)}" selected>${esc(currentValue)} (not in template)</option>`;
+    }
+    return `<select class="form-input ${className}" style="min-width:${minWidth};">${options}</select>`;
+}
+
+function refreshMetricSelectsInCard(card) {
+    if (!card) return;
+    const thingKey = card.querySelector('.thing-key')?.value || '';
+    card.querySelectorAll('.tag-tbody tr').forEach(row => {
+        const tagCell = row.querySelector('td:first-child');
+        if (!tagCell) return;
+        const currentValue = tagCell.querySelector('.tag-id')?.value || '';
+        tagCell.innerHTML = buildMetricSelectHtml(thingKey, currentValue, 'tag-id', '110px');
+    });
+    card.querySelectorAll('.metric-tbody tr').forEach(row => {
+        const metricCell = row.querySelectorAll('td')[1];
+        if (!metricCell) return;
+        const currentValue = metricCell.querySelector('.metric-id')?.value || '';
+        metricCell.innerHTML = buildMetricSelectHtml(thingKey, currentValue, 'metric-id', '140px');
+    });
+}
+
+function refreshAllMetricSelects() {
+    document.querySelectorAll('[data-thing-index]').forEach(refreshMetricSelectsInCard);
+}
+
+function addMetricRow(btn, data) {
+    const card  = btn.closest('[data-thing-index]');
+    const tbody = card.querySelector('.metric-tbody');
+    const d     = data || {};
+    const thingKey = card.querySelector('.thing-key')?.value || '';
+    const tr    = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px;">
+        <input type="text" class="form-input metric-tag-id" style="min-width:120px;"
+          placeholder="tag_id" value="${esc(d.tag_id)}">
+      </td>
+      <td style="padding:6px;">
+        ${buildMetricSelectHtml(thingKey, d.metric_id)}
+      </td>
+      <td style="padding:6px;">
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;color:var(--accent-red);"
+          onclick="this.closest('tr').remove()">Remove</button>
+      </td>`;
+    tbody.appendChild(tr);
+}
+
+function buildConfig() {
+    const things = [];
+
+    document.querySelectorAll('#things-container [data-thing-index]').forEach(node => {
+        const q = (cls) => node.querySelector(cls);
+
+        const tagConfigs = [];
+        node.querySelectorAll('.tag-tbody tr').forEach(row => {
+            const tagId   = row.querySelector('.tag-id').value.trim();
+            const command = row.querySelector('.tag-command').value.trim();
+            if (!tagId && !command) return;
+            tagConfigs.push({
+                tag_id:     tagId,
+                command:    command,
+                value_type: row.querySelector('.tag-type').value,
+            });
+        });
+
+        const metricMappings = [];
+        node.querySelectorAll('.metric-tbody tr').forEach(row => {
+            const tagId    = row.querySelector('.metric-tag-id').value.trim();
+            const metricId = row.querySelector('.metric-id').value.trim();
+            if (!tagId && !metricId) return;
+            metricMappings.push({ tag_id: tagId, metric_id: metricId });
+        });
+
+        const thingKey = q('.thing-key').value.trim();
+        things.push({
+            ...(thingKey ? { thing_key: thingKey } : {}),
+            name:             q('.thing-name').value.trim(),
+            description:      q('.thing-description').value.trim(),
+            ip_address:       q('.thing-ip').value.trim(),
+            port:             parseInt(q('.thing-port').value) || 4000,
+            prefix:           q('.thing-prefix').value.trim() || '13,10,2',
+            suffix:           q('.thing-suffix').value.trim() || '23,13,10,62',
+            timeout_ms:       parseInt(q('.thing-timeout').value) || 10000,
+            scan_interval_ms: parseInt(q('.thing-scan-interval').value) || 5000,
+            send_interval_ms: parseInt(q('.thing-send-interval').value) || 30000,
+            disabled:         q('.thing-disabled').checked,
+            tag_configs:      tagConfigs,
+            metric_mappings:  metricMappings,
+        });
+    });
+
+    const config = { adapter_type: 'openethernet', things };
+    document.getElementById('config_json_hidden').value = JSON.stringify(config);
+    return config;
+}
+
+function saveAdapter() {
+    try {
+        buildConfig();
+        document.getElementById('openethernet-form').submit();
+    } catch (err) {
+        alert('Error building config: ' + err.message);
+        console.error(err);
+    }
+}
+
+function previewJson() {
+    try {
+        const cfg = buildConfig();
+        document.getElementById('json-preview').textContent = JSON.stringify(cfg, null, 2);
+        document.getElementById('json-modal').classList.add('show');
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function copyJson() {
+    const text = document.getElementById('json-preview').textContent;
+    navigator.clipboard.writeText(text).then(() => alert('JSON copied to clipboard.'));
+}
+
+function downloadConfig() {
+    try {
+        const cfg = buildConfig();
+        const name = (document.querySelector('[name=adapter_name]').value.replace(/\s+/g, '_') || 'openethernet_adapter');
+        const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name + '_config.json';
+        a.click();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function uploadConfig(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            loadConfigIntoForm(JSON.parse(e.target.result));
+        } catch (err) {
+            alert('Invalid JSON: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+function loadConfigIntoForm(cfg) {
+    document.getElementById('things-container').innerHTML = '';
+    thingCount = 0;
+    (cfg.things || []).forEach(t => addThing(t));
+}
+
+function esc(s) {
+    return (s || '').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+async function syncThings(btn) {
+    const statusEl = document.getElementById('sync-things-status');
+    btn.disabled = true;
+    btn.textContent = 'Syncing...';
+    if (statusEl) { statusEl.textContent = 'Connecting to Datonis cloud...'; statusEl.style.color = 'var(--text-secondary)'; }
+    try {
+        const resp = await fetch('/api/adapters/sync-things');
+        if (!resp.ok) {
+            if (statusEl) { statusEl.textContent = `Server error (HTTP ${resp.status})`; statusEl.style.color = 'var(--accent-red)'; }
+            return;
+        }
+        const result = await resp.json();
+        if (!result.success) {
+            if (statusEl) { statusEl.textContent = result.message; statusEl.style.color = 'var(--accent-red)'; }
+            alert('Sync Failed: ' + result.message);
+            return;
+        }
+        const things = result.things || [];
+        if (things.length === 0) {
+            if (statusEl) { statusEl.textContent = 'No things found in your cloud account.'; statusEl.style.color = 'var(--accent-amber)'; }
+            return;
+        }
+        things.forEach(t => {
+            if (t.thing_key) {
+                window.SYNCED_THINGS_METRICS[t.thing_key] = t.metrics || [];
+            }
+        });
+        refreshAllMetricSelects();
+        showThingPicker(things);
+        if (statusEl) { statusEl.textContent = `Loaded ${things.length} thing(s)`; statusEl.style.color = 'var(--accent-green)'; }
+    } catch (err) {
+        if (statusEl) { statusEl.textContent = 'Network error: ' + err.message; statusEl.style.color = 'var(--accent-red)'; }
+        alert('Sync Failed: Could not reach the sync endpoint.\n\n' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sync Things';
+    }
+}
+
+function showThingPicker(things) {
+    let rows = things.map(t => `
+        <tr>
+            <td style="padding:8px 6px;"><input type="checkbox" class="sync-check" data-key="${esc(t.thing_key)}" data-name="${esc(t.name || t.thing_key)}" checked></td>
+            <td style="padding:8px 6px; font-family:monospace; font-size:12px; color:var(--accent-blue);">${esc(t.thing_key)}</td>
+            <td style="padding:8px 6px; font-weight:500;">${esc(t.name) || '—'}</td>
+        </tr>`).join('');
+    const modal = document.getElementById('sync-modal');
+    document.getElementById('sync-modal-body').innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="border-bottom:1px solid var(--border-color);">
+                <th style="width:40px;padding:8px 6px;"><input type="checkbox" id="sync-check-all" checked onchange="document.querySelectorAll('.sync-check').forEach(c=>c.checked=this.checked)"></th>
+                <th style="text-align:left;padding:8px 6px;color:var(--text-secondary);">Thing Key</th>
+                <th style="text-align:left;padding:8px 6px;color:var(--text-secondary);">Name</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    modal.classList.add('show');
+    document.getElementById('sync-import-btn').onclick = function () {
+        document.querySelectorAll('.sync-check:checked').forEach(cb => {
+            addThingFromSync(cb.dataset.key, cb.dataset.name);
+        });
+        modal.classList.remove('show');
+    };
+}
+
+function addThingFromSync(thingKey, thingName) {
+    let existing = null;
+    document.querySelectorAll('[data-thing-index]').forEach(card => {
+        if (card.querySelector('.thing-key')?.value === thingKey) existing = card;
+    });
+    if (existing) {
+        existing.querySelector('.thing-name').value = thingName;
+        refreshMetricSelectsInCard(existing);
+        return;
+    }
+    const node = addThing();
+    node.querySelector('.thing-key').value = thingKey;
+    node.querySelector('.thing-name').value = thingName;
+    refreshMetricSelectsInCard(node);
+}
+
+document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('thing-key')) {
+        const card = e.target.closest('[data-thing-index]');
+        if (card) refreshMetricSelectsInCard(card);
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (INITIAL_CONFIG && INITIAL_CONFIG.things && INITIAL_CONFIG.things.length > 0) {
+        loadConfigIntoForm(INITIAL_CONFIG);
+    } else {
+        addThing();
+    }
+});
+</script>
+
+<!-- Sync Things Picker Modal -->
+<div class="modal-overlay" id="sync-modal">
+    <div class="modal" style="max-width:700px; width:95%;">
+        <div class="modal-header">
+            <h2 style="font-size:18px; font-weight:600;">Select Things to Import</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">&#10005;</button>
+        </div>
+        <div id="sync-modal-body" style="max-height:400px; overflow:auto; margin:12px 0;"></div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button id="sync-import-btn" class="btn btn-primary">Import Selected</button>
+            <button class="btn btn-secondary"
+                onclick="document.getElementById('sync-modal').classList.remove('show')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Preview Modal -->
+<div class="modal-overlay" id="json-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 style="font-size:18px; font-weight:600;">Configuration JSON</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('json-modal').classList.remove('show')">&#10005;</button>
+        </div>
+        <pre class="code-block" id="json-preview" style="max-height:400px; overflow:auto;"></pre>
+        <div style="margin-top:12px; display:flex; gap:8px;">
+            <button class="btn btn-sm btn-primary" onclick="copyJson()">Copy</button>
+            <button class="btn btn-sm btn-secondary"
+                onclick="document.getElementById('json-modal').classList.remove('show')">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
