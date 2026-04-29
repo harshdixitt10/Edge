@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Audit Log</h1>
+    <p class="page-subtitle">Privileged actions across the edge server. {{ total }} entries total.</p>
+</div>
+
+<!-- Filter bar -->
+<div class="card" style="margin-bottom:16px; padding:14px;">
+    <form method="GET" action="/audit" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="form-group" style="margin:0;">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-input" value="{{ username_filter }}" placeholder="any" style="width:160px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label class="form-label">Action</label>
+            <select name="action" class="form-input" style="width:200px;">
+                <option value="">— any —</option>
+                {% for a in distinct_actions %}
+                <option value="{{ a }}" {% if a == action_filter %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label class="form-label">Result</label>
+            <select name="result" class="form-input" style="width:140px;">
+                <option value="">— any —</option>
+                <option value="success" {% if result_filter == 'success' %}selected{% endif %}>success</option>
+                <option value="failure" {% if result_filter == 'failure' %}selected{% endif %}>failure</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Apply</button>
+        <a href="/audit" class="btn btn-secondary">Clear</a>
+        <a href="/audit/export.csv?username={{ username_filter }}&action={{ action_filter }}&result={{ result_filter }}"
+           class="btn btn-secondary">Export CSV</a>
+    </form>
+</div>
+
+<div class="card" style="overflow-x:auto;">
+    {% if rows %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Time (UTC)</th>
+                <th>User</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>Resource</th>
+                <th>IP</th>
+                <th>Result</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td style="font-family:monospace; font-size:12px; white-space:nowrap;">{{ r.timestamp[:19] }}</td>
+                <td>{{ r.username or '—' }}</td>
+                <td><span class="badge {% if r.role == 'admin' %}badge-blue{% elif r.role == 'operator' %}badge-amber{% else %}badge-green{% endif %}">{{ r.role or '—' }}</span></td>
+                <td style="font-family:monospace; font-size:12px;">{{ r.action }}</td>
+                <td style="font-size:12px;">
+                    {% if r.resource_type %}<span style="color:var(--text-muted);">{{ r.resource_type }}</span>{% endif %}
+                    {% if r.resource_id %}<span style="font-family:monospace;">{{ r.resource_id[:24] }}{% if r.resource_id|length > 24 %}…{% endif %}</span>{% endif %}
+                </td>
+                <td style="font-family:monospace; font-size:12px;">{{ r.ip_address or '—' }}</td>
+                <td>
+                    {% if r.result == 'success' %}
+                    <span class="badge badge-success">success</span>
+                    {% else %}
+                    <span class="badge badge-error">{{ r.result }}</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:12px; color:var(--text-secondary); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    title="{{ r.details }}">{{ r.details }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No audit entries match this filter.</div>
+    {% endif %}
+</div>
+
+{% if pages > 1 %}
+<div style="display:flex; gap:8px; justify-content:center; align-items:center; margin-top:16px;">
+    {% set qstring = "username=" ~ username_filter ~ "&action=" ~ action_filter ~ "&result=" ~ result_filter %}
+    {% if page > 1 %}
+        <a href="/audit?{{ qstring }}&page={{ page - 1 }}" class="btn btn-sm btn-secondary">‹ Prev</a>
+    {% endif %}
+    <span style="font-size:13px; color:var(--text-secondary);">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}
+        <a href="/audit?{{ qstring }}&page={{ page + 1 }}" class="btn btn-sm btn-secondary">Next ›</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

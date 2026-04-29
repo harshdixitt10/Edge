@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Users — Edge Server{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">User Management</h1>
+    <p class="page-subtitle">Manage local users and their roles. The bootstrap admin (<strong>{{ bootstrap_username }}</strong>) is managed via Settings.</p>
+</div>
+
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+<div class="card" style="margin-bottom:20px;">
+    <h2 class="card-title" style="margin-bottom:14px;">Add User</h2>
+    <form method="POST" action="/users/create">
+        <div class="grid-3">
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" class="form-input" minlength="3" maxlength="32" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-input" minlength="6" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select name="role" class="form-input">
+                    {% for r in valid_roles %}
+                    <option value="{{ r }}" {% if r == 'viewer' %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Create User</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2 class="card-title" style="margin-bottom:14px;">Existing Users ({{ users|length }})</h2>
+    {% if users %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>
+                    <strong>{{ u.username }}</strong>
+                    {% if u.is_bootstrap %}<span class="badge badge-blue" style="margin-left:6px;">bootstrap</span>{% endif %}
+                </td>
+                <td>
+                    {% if u.is_bootstrap %}
+                        <span class="badge badge-amber">{{ u.role }}</span>
+                    {% else %}
+                        <form method="POST" action="/users/{{ u.username }}/role" style="display:inline-flex; gap:6px; align-items:center;">
+                            <select name="role" class="form-input" style="width:auto; padding:4px 8px;" onchange="this.form.submit()">
+                                {% for r in valid_roles %}
+                                <option value="{{ r }}" {% if r == u.role %}selected{% endif %}>{{ r }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    {% endif %}
+                </td>
+                <td style="color:var(--text-muted); font-size:12px;">{{ u.created_at or '—' }}</td>
+                <td>
+                    {% if not u.is_bootstrap %}
+                    <button type="button" class="btn btn-sm btn-secondary"
+                        onclick="resetPasswordPrompt('{{ u.username }}')">Reset Password</button>
+                    <form method="POST" action="/users/{{ u.username }}/delete" style="display:inline;"
+                          onsubmit="return confirm('Delete user {{ u.username }}?');">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                    {% else %}
+                    <span style="font-size:12px; color:var(--text-muted);">Manage via Settings</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No users yet — the bootstrap admin will appear after first login.</div>
+    {% endif %}
+</div>
+
+<form id="reset-password-form" method="POST" style="display:none;">
+    <input type="hidden" name="password" id="reset-password-value">
+</form>
+
+<script>
+async function resetPasswordPrompt(username) {
+    const pw = await AppModal.prompt(`Enter new password for "${username}" (minimum 6 characters):`, '', {
+        title: 'Reset Password', icon: '🔑', confirmText: 'Reset',
+    });
+    if (!pw) return;
+    if (pw.length < 6) {
+        await AppModal.alert('Password must be at least 6 characters.');
+        return;
+    }
+    const form = document.getElementById('reset-password-form');
+    form.action = `/users/${encodeURIComponent(username)}/password`;
+    document.getElementById('reset-password-value').value = pw;
+    form.submit();
+}
+</script>
+{% endblock %}

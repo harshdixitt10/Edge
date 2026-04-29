@@ -12,11 +12,13 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from adapters.registry import get_registry, get_config_model, get_available_adapters
+from core.audit import log_action
+from web.auth import require_role
 from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
@@ -53,7 +55,7 @@ async def adapter_list(request: Request):
     })
 
 
-@router.get("/adapters/new", response_class=HTMLResponse)
+@router.get("/adapters/new", response_class=HTMLResponse, dependencies=[Depends(require_role("admin"))])
 async def adapter_select_type(request: Request):
     available = get_available_adapters()
     return templates.TemplateResponse("adapter_select.html", {
@@ -64,7 +66,7 @@ async def adapter_select_type(request: Request):
 
 # ── Dynamic config form (works for any registered adapter type) ──
 
-@router.get("/adapters/{adapter_type}/config", response_class=HTMLResponse)
+@router.get("/adapters/{adapter_type}/config", response_class=HTMLResponse, dependencies=[Depends(require_role("admin"))])
 async def adapter_config_new(request: Request, adapter_type: str):
     registry = get_registry()
     info = registry.get(adapter_type)
@@ -82,7 +84,7 @@ async def adapter_config_new(request: Request, adapter_type: str):
     })
 
 
-@router.get("/adapters/{adapter_id}/edit", response_class=HTMLResponse)
+@router.get("/adapters/{adapter_id}/edit", response_class=HTMLResponse, dependencies=[Depends(require_role("admin"))])
 async def adapter_edit(request: Request, adapter_id: str):
     adapter = await store.get_adapter(adapter_id) if store else None
     if not adapter:
@@ -102,7 +104,7 @@ async def adapter_edit(request: Request, adapter_id: str):
     })
 
 
-@router.post("/adapters/{adapter_type}/save")
+@router.post("/adapters/{adapter_type}/save", dependencies=[Depends(require_role("admin"))])
 async def adapter_save(request: Request, adapter_type: str):
     """Validate and save any adapter type config."""
     form = await request.form()
@@ -123,6 +125,7 @@ async def adapter_save(request: Request, adapter_type: str):
         validated = ConfigModel(**config_data)
         config_json = validated.model_dump_json()
 
+        is_edit = bool(form.get("adapter_id"))
         await store.save_adapter(
             adapter_id=adapter_id,
             name=adapter_name,
@@ -141,10 +144,22 @@ async def adapter_save(request: Request, adapter_type: str):
             trigger="adapter_saved",
             name=f"Adapter saved: {adapter_name}",
         )
+        await log_action(
+            store, request,
+            action="adapter_updated" if is_edit else "adapter_created",
+            resource_type="adapter", resource_id=adapter_id,
+            details={"name": adapter_name, "type": adapter_type},
+        )
         return RedirectResponse("/adapters", status_code=302)
 
     except Exception as e:
         config_data_fallback = locals().get("config_data", {})
+        await log_action(
+            store, request, action="adapter_save",
+            resource_type="adapter", resource_id=adapter_id,
+            details={"name": adapter_name, "type": adapter_type, "error": str(e)},
+            result="failure",
+        )
         return templates.TemplateResponse(template_name, {
             "request": request,
             "adapter_id": adapter_id,
@@ -157,20 +172,26 @@ async def adapter_save(request: Request, adapter_type: str):
 
 # ── Delete / Toggle ───────────────────────────────────────────
 
-@router.post("/adapters/{adapter_id}/delete")
-async def adapter_delete(adapter_id: str):
+@router.post("/adapters/{adapter_id}/delete", dependencies=[Depends(require_role("admin"))])
+async def adapter_delete(adapter_id: str, request: Request):
     if store:
         adapter = await store.get_adapter(adapter_id)
         name = adapter["name"] if adapter else adapter_id
+        adapter_type = adapter["type"] if adapter else ""
         await store.delete_adapter(adapter_id)
         await snapshots_routes.capture_snapshot("adapter_deleted", f"Adapter deleted: {name}")
         if watchdog:
             watchdog.restart_task("adapters")
+        await log_action(
+            store, request, action="adapter_deleted",
+            resource_type="adapter", resource_id=adapter_id,
+            details={"name": name, "type": adapter_type},
+        )
     return RedirectResponse("/adapters", status_code=302)
 
 
-@router.post("/adapters/{adapter_id}/toggle")
-async def adapter_toggle(adapter_id: str):
+@router.post("/adapters/{adapter_id}/toggle", dependencies=[Depends(require_role("admin", "operator"))])
+async def adapter_toggle(adapter_id: str, request: Request):
     if store:
         adapter = await store.get_adapter(adapter_id)
         if adapter:
@@ -183,12 +204,18 @@ async def adapter_toggle(adapter_id: str):
             )
             if watchdog:
                 watchdog.restart_task("adapters")
+            await log_action(
+                store, request,
+                action="adapter_enabled" if new_enabled else "adapter_disabled",
+                resource_type="adapter", resource_id=adapter_id,
+                details={"name": adapter["name"]},
+            )
     return RedirectResponse("/adapters", status_code=302)
 
 
 # ── Import / Test / Sync ──────────────────────────────────────
 
-@router.post("/adapters/{adapter_type}/import", response_class=HTMLResponse)
+@router.post("/adapters/{adapter_type}/import", response_class=HTMLResponse, dependencies=[Depends(require_role("admin"))])
 async def adapter_import(request: Request, adapter_type: str):
     """Re-render config form pre-populated with uploaded JSON."""
     form = await request.form()
