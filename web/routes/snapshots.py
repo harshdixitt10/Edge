@@ -10,9 +10,12 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+
+from core.audit import log_action
+from web.auth import require_role
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -145,7 +148,7 @@ async def download_snapshot(snapshot_id: str):
     )
 
 
-@router.post("/api/snapshots/upload")
+@router.post("/api/snapshots/upload", dependencies=[Depends(require_role("admin"))])
 async def upload_snapshot(request: Request):
     """Upload a snapshot JSON and save it (does NOT apply — use rollback to apply)."""
     if not store:
@@ -155,18 +158,23 @@ async def upload_snapshot(request: Request):
         # Validate it looks like a snapshot
         if "adapters" not in data and "cloud" not in data:
             return JSONResponse({"success": False, "message": "Invalid snapshot format"})
+        snap_id = str(uuid.uuid4())
         await store.save_snapshot(
-            snapshot_id=str(uuid.uuid4()),
+            snapshot_id=snap_id,
             name=f"Uploaded snapshot ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')})",
             trigger="upload",
             snapshot_json=json.dumps(data, indent=2),
+        )
+        await log_action(
+            store, request, action="snapshot_uploaded",
+            resource_type="snapshot", resource_id=snap_id,
         )
         return JSONResponse({"success": True, "message": "Snapshot uploaded successfully"})
     except Exception as e:
         return JSONResponse({"success": False, "message": str(e)})
 
 
-@router.post("/api/snapshots/{snapshot_id}/rollback")
+@router.post("/api/snapshots/{snapshot_id}/rollback", dependencies=[Depends(require_role("admin"))])
 async def rollback_snapshot(snapshot_id: str, request: Request):
     """Roll back the entire configuration to a saved snapshot."""
     if not store or not config_manager:
@@ -229,13 +237,23 @@ async def rollback_snapshot(snapshot_id: str, request: Request):
             watchdog.restart_task("adapters")
 
         logger.info(f"🔄 Rolled back to snapshot: {snapshot['name']}")
+        await log_action(
+            store, request, action="snapshot_rollback",
+            resource_type="snapshot", resource_id=snapshot_id,
+            details={"name": snapshot["name"]},
+        )
         return JSONResponse({"success": True, "message": f"Rolled back to: {snapshot['name']}"})
     except Exception as e:
         logger.error(f"Rollback failed: {e}")
+        await log_action(
+            store, request, action="snapshot_rollback",
+            resource_type="snapshot", resource_id=snapshot_id,
+            details={"error": str(e)}, result="failure",
+        )
         return JSONResponse({"success": False, "message": f"Rollback failed: {e}"})
 
 
-@router.post("/api/snapshots/manual")
+@router.post("/api/snapshots/manual", dependencies=[Depends(require_role("admin", "operator"))])
 async def manual_snapshot(request: Request):
     """Manually take a snapshot."""
     try:
@@ -247,9 +265,15 @@ async def manual_snapshot(request: Request):
     return JSONResponse({"success": True})
 
 
-@router.post("/api/snapshots/{snapshot_id}/delete")
-async def delete_snapshot(snapshot_id: str):
+@router.post("/api/snapshots/{snapshot_id}/delete", dependencies=[Depends(require_role("admin"))])
+async def delete_snapshot(snapshot_id: str, request: Request):
     """Delete a snapshot."""
     if store:
+        snap = await store.get_snapshot(snapshot_id)
         await store.delete_snapshot(snapshot_id)
+        await log_action(
+            store, request, action="snapshot_deleted",
+            resource_type="snapshot", resource_id=snapshot_id,
+            details={"name": snap["name"] if snap else ""},
+        )
     return JSONResponse({"success": True})

@@ -7,10 +7,12 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from core import credential_backup
+from core.audit import log_action
+from web.auth import require_role
 from web.routes import snapshots as snapshots_routes
 
 router = APIRouter()
@@ -40,7 +42,7 @@ async def settings_page(request: Request):
     })
 
 
-@router.post("/settings/cloud")
+@router.post("/settings/cloud", dependencies=[Depends(require_role("admin"))])
 async def save_cloud_settings(
     request: Request,
     endpoint_url: str = Form(...),
@@ -70,6 +72,19 @@ async def save_cloud_settings(
             config.cloud.ssl_verify = ssl_verify
 
         await snapshots_routes.capture_snapshot("cloud_settings", "Cloud settings updated")
+        await log_action(
+            store, request, action="settings_cloud_updated",
+            resource_type="settings", resource_id="cloud",
+            details={
+                "endpoint_url": endpoint_url, "edge_id": edge_id,
+                "timeout_secs": timeout_secs, "batch_size": batch_size,
+                "heartbeat_interval_secs": heartbeat_interval_secs,
+                "ssl_verify": ssl_verify,
+                "api_key_changed": bool(api_key),
+                "secret_key_changed": bool(secret_key),
+                "gateway_key_changed": bool(gateway_key),
+            },
+        )
 
         # Reinitialize cloud connector with new credentials
         if cloud_connector:
@@ -87,7 +102,7 @@ async def save_cloud_settings(
     return RedirectResponse("/settings?saved=1", status_code=302)
 
 
-@router.post("/settings/retention")
+@router.post("/settings/retention", dependencies=[Depends(require_role("admin"))])
 async def save_retention_settings(
     request: Request,
     retention_days: int = Form(7),
@@ -97,10 +112,15 @@ async def save_retention_settings(
         cfg = config_manager.config
         cfg.database.retention_days = retention_days
         config_manager.save()
+    await log_action(
+        store, request, action="settings_retention_updated",
+        resource_type="settings", resource_id="retention",
+        details={"retention_days": retention_days},
+    )
     return RedirectResponse("/settings?saved=1", status_code=302)
 
 
-@router.post("/settings/change-credentials")
+@router.post("/settings/change-credentials", dependencies=[Depends(require_role("admin"))])
 async def change_credentials(
     request: Request,
     current_password: str = Form(...),
@@ -121,6 +141,11 @@ async def change_credentials(
 
     # Verify current password first
     if not auth_manager.verify_password(current_password, cfg.default_password_hash):
+        await log_action(
+            store, request, action="credentials_change_attempt",
+            resource_type="user", resource_id=cfg.default_username,
+            details="wrong_current_password", result="failure",
+        )
         return RedirectResponse("/settings?pw_error=Current+password+is+incorrect", status_code=302)
 
     new_username = new_username.strip()
@@ -149,6 +174,10 @@ async def change_credentials(
         if len(new_password) < 6:
             return RedirectResponse("/settings?pw_error=Password+must+be+at+least+6+characters", status_code=302)
 
+    # Capture the OLD username before mutating config so we can clean up its
+    # DB row (otherwise it could keep authenticating via the users table).
+    old_username = cfg.default_username
+
     # Apply changes
     with config_manager.update_config() as config:
         if username_changed:
@@ -156,9 +185,13 @@ async def change_credentials(
         if password_changed:
             config.auth.default_password_hash = auth_manager.hash_password(new_password)
 
-    # Keep the DB users table in sync with the new config so the old row can't
-    # be used to log in via the fallback store lookup in web/app.py.
+    # Keep the DB users table in sync with the new config:
+    #   1. Drop the old bootstrap admin row (if renamed) so the stale name
+    #      can't authenticate via the DB lookup path.
+    #   2. Upsert the new bootstrap admin with role='admin'.
     if store is not None:
+        if username_changed and old_username:
+            await store.delete_user(old_username)
         await store.sync_default_user(
             config_manager.config.auth.default_username,
             config_manager.config.auth.default_password_hash,
@@ -178,6 +211,15 @@ async def change_credentials(
             + ("username + password" if username_changed and password_changed
                else "username" if username_changed else "password")
         ),
+    )
+    await log_action(
+        store, request, action="credentials_changed",
+        resource_type="user", resource_id=config_manager.config.auth.default_username,
+        details={
+            "username_changed": username_changed,
+            "password_changed": password_changed,
+            "old_username": old_username if username_changed else "",
+        },
     )
 
     # If the username changed, force re-login so the JWT (subject=old username) is replaced

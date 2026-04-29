@@ -7,10 +7,12 @@
         <h1 class="page-title">Adapters</h1>
         <p class="page-subtitle">Manage protocol adapters for data collection</p>
     </div>
+    {% if current_user and current_user.role == 'admin' %}
     <a href="/adapters/new" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add Adapter
     </a>
+    {% endif %}
 </div>
 
 {% block scripts %}
@@ -84,11 +86,14 @@ async function toggleAdapter(id, name, enabled) {
         </div>
 
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px;">
+            {% if current_user and current_user.role == 'admin' %}
             <a href="/adapters/{{ adapter.id }}/edit" class="btn btn-sm btn-secondary">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Edit
             </a>
+            {% endif %}
 
+            {% if current_user and current_user.role in ('admin', 'operator') %}
             {% if adapter.enabled %}
             <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAdapter('{{ adapter.id }}', '{{ adapter.name }}', true)" title="Disable this adapter — it will stop running">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -100,11 +105,14 @@ async function toggleAdapter(id, name, enabled) {
                 Enable
             </button>
             {% endif %}
+            {% endif %}
 
+            {% if current_user and current_user.role == 'admin' %}
             <button type="button" class="btn btn-sm btn-danger" onclick="deleteAdapter('{{ adapter.id }}', '{{ adapter.name }}')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 Delete
             </button>
+            {% endif %}
         </div>
     </div>
     {% endfor %}
@@ -115,11 +123,13 @@ async function toggleAdapter(id, name, enabled) {
         <div class="empty-state-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24"/></svg>
         </div>
-        <p class="empty-state-text">No adapters configured yet.<br>Add your first adapter to start collecting data from your industrial equipment.</p>
+        <p class="empty-state-text">No adapters configured yet.<br>{% if current_user and current_user.role == 'admin' %}Add your first adapter to start collecting data from your industrial equipment.{% else %}An admin needs to add adapters here.{% endif %}</p>
+        {% if current_user and current_user.role == 'admin' %}
         <a href="/adapters/new" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add Adapter
         </a>
+        {% endif %}
     </div>
 </div>
 {% endif %}

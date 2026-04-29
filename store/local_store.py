@@ -70,9 +70,12 @@ CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'admin',
     created_at    TEXT DEFAULT (datetime('now'))
 );
 """
+
+VALID_ROLES = ("admin", "operator", "viewer")
 
 CREATE_SNAPSHOTS_TABLE = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -82,6 +85,28 @@ CREATE TABLE IF NOT EXISTS snapshots (
     snapshot_json TEXT NOT NULL DEFAULT '{}',
     created_at  TEXT DEFAULT (datetime('now'))
 );
+"""
+
+CREATE_AUDIT_LOG_TABLE = """
+CREATE TABLE IF NOT EXISTS audit_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp     TEXT NOT NULL DEFAULT (datetime('now')),
+    username      TEXT NOT NULL DEFAULT '',
+    role          TEXT NOT NULL DEFAULT '',
+    action        TEXT NOT NULL,
+    resource_type TEXT NOT NULL DEFAULT '',
+    resource_id   TEXT NOT NULL DEFAULT '',
+    ip_address    TEXT NOT NULL DEFAULT '',
+    user_agent    TEXT NOT NULL DEFAULT '',
+    details       TEXT NOT NULL DEFAULT '',
+    result        TEXT NOT NULL DEFAULT 'success'
+);
+"""
+
+CREATE_AUDIT_LOG_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_username  ON audit_log(username);
+CREATE INDEX IF NOT EXISTS idx_audit_action    ON audit_log(action);
 """
 
 CREATE_ACTIVITY_LOG_TABLE = """
@@ -133,7 +158,16 @@ class LocalStore:
             + CREATE_USERS_TABLE
             + CREATE_ACTIVITY_LOG_TABLE
             + CREATE_SNAPSHOTS_TABLE
+            + CREATE_AUDIT_LOG_TABLE
+            + CREATE_AUDIT_LOG_INDEX
         )
+        # Schema migration: add `role` column if upgrading from a pre-RBAC DB.
+        cur = await self._db.execute("PRAGMA table_info(users)")
+        cols = {row[1] for row in await cur.fetchall()}
+        if "role" not in cols:
+            await self._db.execute(
+                "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'"
+            )
         await self._db.commit()
         logger.info(f"Local store initialized at {self.db_path}")
 
@@ -368,30 +402,74 @@ class LocalStore:
     async def get_user(self, username: str) -> Optional[dict]:
         """Get a user by username."""
         cursor = await self._db.execute(
-            "SELECT id, username, password_hash FROM users WHERE username = ?",
+            "SELECT id, username, password_hash, role FROM users WHERE username = ?",
             (username,),
         )
         r = await cursor.fetchone()
         if not r:
             return None
-        return {"id": r[0], "username": r[1], "password_hash": r[2]}
+        return {"id": r[0], "username": r[1], "password_hash": r[2], "role": r[3] or "admin"}
 
-    async def create_user(self, username: str, password_hash: str) -> None:
+    async def get_users(self) -> list[dict]:
+        """List all users (without password hashes)."""
+        cursor = await self._db.execute(
+            "SELECT id, username, role, created_at FROM users ORDER BY username"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {"id": r[0], "username": r[1], "role": r[2] or "admin", "created_at": r[3]}
+            for r in rows
+        ]
+
+    async def create_user(self, username: str, password_hash: str, role: str = "viewer") -> None:
         """Create a new user."""
+        if role not in VALID_ROLES:
+            raise ValueError(f"invalid role: {role}")
         await self._db.execute(
-            "INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)",
-            (username, password_hash),
+            "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (username, password_hash, role),
         )
         await self._db.commit()
 
-    async def sync_default_user(self, username: str, password_hash: str) -> None:
-        """Make `username` the only row in the users table with the supplied hash.
-        Removes stale rows (e.g. the original "admin" entry after a rename) so
-        they can't re-authenticate via the fallback lookup in web/app.py."""
-        await self._db.execute("DELETE FROM users WHERE username != ?", (username,))
+    async def update_user_role(self, username: str, role: str) -> None:
+        if role not in VALID_ROLES:
+            raise ValueError(f"invalid role: {role}")
         await self._db.execute(
-            """INSERT INTO users (username, password_hash) VALUES (?, ?)
-               ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash""",
+            "UPDATE users SET role = ? WHERE username = ?", (role, username)
+        )
+        await self._db.commit()
+
+    async def update_user_password(self, username: str, password_hash: str) -> None:
+        await self._db.execute(
+            "UPDATE users SET password_hash = ? WHERE username = ?",
+            (password_hash, username),
+        )
+        await self._db.commit()
+
+    async def delete_user(self, username: str) -> None:
+        await self._db.execute("DELETE FROM users WHERE username = ?", (username,))
+        await self._db.commit()
+
+    async def count_admins(self) -> int:
+        cursor = await self._db.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin'"
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def sync_default_user(self, username: str, password_hash: str) -> None:
+        """Ensure the bootstrap admin row exists and matches config.
+
+        - Inserts/updates the row for `username` with the given hash and role='admin'.
+        - Does NOT delete other users — those are managed via the /users page.
+        - Demotes any other 'admin' rows that aren't the bootstrap user? No — RBAC
+          allows multiple admins. Just guarantees the bootstrap user is admin.
+        """
+        await self._db.execute(
+            """INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')
+               ON CONFLICT(username) DO UPDATE SET
+                 password_hash = excluded.password_hash,
+                 role          = 'admin'""",
             (username, password_hash),
         )
         await self._db.commit()
@@ -539,4 +617,115 @@ class LocalStore:
             for r in rows
         ]
 
+    # ── Audit Log Operations ──────────────────
+
+    async def write_audit(
+        self,
+        username: str,
+        role: str,
+        action: str,
+        resource_type: str = "",
+        resource_id: str = "",
+        ip_address: str = "",
+        user_agent: str = "",
+        details: str = "",
+        result: str = "success",
+    ) -> None:
+        """Append a single audit-log row. Never raises — logging must not
+        take down the request."""
+        try:
+            await self._db.execute(
+                """INSERT INTO audit_log
+                   (timestamp, username, role, action, resource_type, resource_id,
+                    ip_address, user_agent, details, result)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    username or "",
+                    role or "",
+                    action,
+                    resource_type or "",
+                    resource_id or "",
+                    ip_address or "",
+                    user_agent or "",
+                    details or "",
+                    result or "success",
+                ),
+            )
+            await self._db.commit()
+        except Exception as e:
+            logger.warning(f"audit log write failed: {e}")
+
+    async def get_audit_log(
+        self,
+        username: Optional[str] = None,
+        action: Optional[str] = None,
+        result: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[dict]:
+        clauses = []
+        args: list = []
+        if username:
+            clauses.append("username = ?")
+            args.append(username)
+        if action:
+            clauses.append("action = ?")
+            args.append(action)
+        if result:
+            clauses.append("result = ?")
+            args.append(result)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        args.extend([int(limit), int(offset)])
+        cursor = await self._db.execute(
+            f"""SELECT id, timestamp, username, role, action, resource_type,
+                       resource_id, ip_address, user_agent, details, result
+                FROM audit_log {where}
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?""",
+            args,
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "timestamp": r[1],
+                "username": r[2],
+                "role": r[3],
+                "action": r[4],
+                "resource_type": r[5],
+                "resource_id": r[6],
+                "ip_address": r[7],
+                "user_agent": r[8],
+                "details": r[9],
+                "result": r[10],
+            }
+            for r in rows
+        ]
+
+    async def count_audit_log(
+        self,
+        username: Optional[str] = None,
+        action: Optional[str] = None,
+        result: Optional[str] = None,
+    ) -> int:
+        clauses = []
+        args: list = []
+        if username:
+            clauses.append("username = ?"); args.append(username)
+        if action:
+            clauses.append("action = ?"); args.append(action)
+        if result:
+            clauses.append("result = ?"); args.append(result)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        cursor = await self._db.execute(f"SELECT COUNT(*) FROM audit_log {where}", args)
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def get_distinct_audit_actions(self) -> list[str]:
+        cursor = await self._db.execute(
+            "SELECT DISTINCT action FROM audit_log ORDER BY action"
+        )
+        rows = await cursor.fetchall()
+        return [r[0] for r in rows]
 
