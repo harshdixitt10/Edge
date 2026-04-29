@@ -86,6 +86,7 @@ mkdir -p "$PARENT_DIR/Snapshot Backup"
 mkdir -p "$PARENT_DIR/Configuration Backup/opcua_conf_backup"
 mkdir -p "$PARENT_DIR/Configuration Backup/csv_conf_backup"
 mkdir -p "$PARENT_DIR/Configuration Backup/mtconnect_conf_backup"
+mkdir -p "$PARENT_DIR/Configuration Backup/openethernet_conf_backup"
 ok "Directories created (logs, data, Snapshot Backup, Configuration Backup)"
 
 # ── Step 6: Fix ownership ──

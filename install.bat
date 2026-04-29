@@ -119,6 +119,7 @@ if not exist "%PARENT_DIR%\Snapshot Backup" mkdir "%PARENT_DIR%\Snapshot Backup"
 if not exist "%PARENT_DIR%\Configuration Backup\opcua_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\opcua_conf_backup"
 if not exist "%PARENT_DIR%\Configuration Backup\csv_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\csv_conf_backup"
 if not exist "%PARENT_DIR%\Configuration Backup\mtconnect_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\mtconnect_conf_backup"
+if not exist "%PARENT_DIR%\Configuration Backup\openethernet_conf_backup" mkdir "%PARENT_DIR%\Configuration Backup\openethernet_conf_backup"
 echo [OK]    Directories created
 
 REM ── Step 6: Create a wrapper script for the service ──
